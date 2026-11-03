@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@android:color/white" />
+    <foreground>
+        <inset
+            android:drawable="@drawable/shca_launcher_mark"
+            android:insetLeft="25%"
+            android:insetTop="26%"
+            android:insetRight="25%"
+            android:insetBottom="26%" />
+    </foreground>
+</adaptive-icon>

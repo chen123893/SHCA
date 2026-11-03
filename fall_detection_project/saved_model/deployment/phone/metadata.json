@@ -1,0 +1,214 @@
+{
+  "dataset": "phone",
+  "model_role": "phone/pocket/waist",
+  "sampling_rate_hz": 50,
+  "window_size": 128,
+  "step_size": 64,
+  "window_duration_s": 2.56,
+  "step_duration_s": 1.28,
+  "input_shape": [
+    1,
+    128,
+    8
+  ],
+  "input_dtype": "float32",
+  "feature_names": [
+    "acc_x_m_s2",
+    "acc_y_m_s2",
+    "acc_z_m_s2",
+    "gyro_x_rad_s",
+    "gyro_y_rad_s",
+    "gyro_z_rad_s",
+    "acc_magnitude_m_s2",
+    "gyro_magnitude_rad_s"
+  ],
+  "labels": [
+    "standing",
+    "walking",
+    "running",
+    "jumping",
+    "chair_transition",
+    "vehicle_transition",
+    "fall"
+  ],
+  "fall_label_index": 6,
+  "fall_threshold": 0.41450071334838867,
+  "threshold_selected_on_validation": {
+    "threshold": 0.41450071334838867,
+    "precision": 0.735632183908046,
+    "recall": 0.9142857142857143,
+    "f1": 0.8152866242038218
+  },
+  "recommended_alert_policy": {
+    "threshold": 0.39999999999999997,
+    "minimum_positive_windows": 2,
+    "rolling_window_count": 3,
+    "user_cancellation_seconds": 15,
+    "alert_cooldown_seconds": 30,
+    "validation_result": {
+      "threshold": 0.39999999999999997,
+      "fall_events": 24,
+      "detected_fall_events": 23,
+      "fall_event_recall": 0.9583333333333334,
+      "false_alerts": 3,
+      "nonfall_recording_hours": 0.5343999878724416,
+      "false_alerts_per_hour": 5.613772582487566
+    }
+  },
+  "subject_split": {
+    "train": [
+      "1",
+      "3",
+      "6",
+      "7",
+      "8",
+      "9",
+      "11",
+      "12",
+      "13",
+      "14",
+      "15",
+      "16",
+      "17",
+      "18",
+      "19",
+      "20",
+      "21",
+      "29",
+      "30",
+      "31"
+    ],
+    "validation": [
+      "4",
+      "10"
+    ],
+    "test": [
+      "2",
+      "5"
+    ]
+  },
+  "window_counts": {
+    "train": 4238,
+    "validation": 1497,
+    "test": 1496
+  },
+  "test_metrics": {
+    "activity_accuracy": 0.9585561497326203,
+    "activity_macro_f1": 0.920339984030593,
+    "fall_threshold": 0.41450071334838867,
+    "fall_precision": 0.9857142857142858,
+    "fall_recall": 0.9583333333333334,
+    "fall_f1": 0.971830985915493,
+    "classification_report": {
+      "standing": {
+        "precision": 0.9810526315789474,
+        "recall": 1.0,
+        "f1-score": 0.9904357066950054,
+        "support": 466.0
+      },
+      "walking": {
+        "precision": 0.9395866454689984,
+        "recall": 0.985,
+        "f1-score": 0.9617575264442636,
+        "support": 600.0
+      },
+      "running": {
+        "precision": 0.9818181818181818,
+        "recall": 0.8244274809160306,
+        "f1-score": 0.8962655601659751,
+        "support": 131.0
+      },
+      "jumping": {
+        "precision": 1.0,
+        "recall": 0.9694656488549618,
+        "f1-score": 0.9844961240310077,
+        "support": 131.0
+      },
+      "chair_transition": {
+        "precision": 0.8095238095238095,
+        "recall": 1.0,
+        "f1-score": 0.8947368421052632,
+        "support": 34.0
+      },
+      "vehicle_transition": {
+        "precision": 0.9069767441860465,
+        "recall": 0.6290322580645161,
+        "f1-score": 0.7428571428571429,
+        "support": 62.0
+      },
+      "fall": {
+        "precision": 0.9857142857142858,
+        "recall": 0.9583333333333334,
+        "f1-score": 0.971830985915493,
+        "support": 72.0
+      },
+      "accuracy": 0.9585561497326203,
+      "macro avg": {
+        "precision": 0.9435246140414671,
+        "recall": 0.9094655315955488,
+        "f1-score": 0.920339984030593,
+        "support": 1496.0
+      },
+      "weighted avg": {
+        "precision": 0.9594040719586521,
+        "recall": 0.9585561497326203,
+        "f1-score": 0.9568364721195675,
+        "support": 1496.0
+      }
+    },
+    "alert_policy": {
+      "threshold": 0.39999999999999997,
+      "fall_events": 24,
+      "detected_fall_events": 23,
+      "fall_event_recall": 0.9583333333333334,
+      "false_alerts": 0,
+      "nonfall_recording_hours": 0.5333333212958441,
+      "false_alerts_per_hour": 0.0
+    }
+  },
+  "tflite": {
+    "file": "activity_fall_model.tflite",
+    "size_bytes": 304780,
+    "verification": {
+      "input_shape": [
+        1,
+        128,
+        8
+      ],
+      "input_dtype": "<class 'numpy.float32'>",
+      "outputs": [
+        {
+          "index": 48,
+          "shape": [
+            1,
+            7
+          ],
+          "dtype": "<class 'numpy.float32'>"
+        },
+        {
+          "index": 51,
+          "shape": [
+            1,
+            1
+          ],
+          "dtype": "<class 'numpy.float32'>"
+        }
+      ],
+      "max_activity_probability_delta": 4.76837158203125e-07,
+      "max_fall_probability_delta": 1.7881393432617188e-07,
+      "verified_examples": 32
+    }
+  },
+  "training": {
+    "epochs_requested": 45,
+    "epochs_completed": 15,
+    "batch_size": 64,
+    "seed": 42,
+    "best_validation_loss": 0.22852082550525665
+  },
+  "limitations": [
+    "Use only at the body position represented by this dataset.",
+    "Dataset falls are staged; validate on the target Android phone/watch before emergency use.",
+    "Activity labels describe the dataset protocol and are not a clinical diagnosis."
+  ]
+}

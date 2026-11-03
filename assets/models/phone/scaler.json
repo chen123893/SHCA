@@ -1,0 +1,15 @@
+{
+  "feature_names": [
+    "acc_magnitude_m_s2",
+    "gyro_magnitude_rad_s"
+  ],
+  "mean": [
+    10.323995590209961,
+    1.2173279523849487
+  ],
+  "scale": [
+    3.738931655883789,
+    1.3045510053634644
+  ],
+  "formula": "scaled = (raw - mean) / scale"
+}

@@ -1,0 +1,229 @@
+{
+  "dataset": "wearable",
+  "model_role": "wrist smartwatch",
+  "sampling_rate_hz": 50,
+  "window_size": 128,
+  "step_size": 64,
+  "window_duration_s": 2.56,
+  "step_duration_s": 1.28,
+  "input_shape": [
+    1,
+    128,
+    8
+  ],
+  "input_dtype": "float32",
+  "feature_names": [
+    "acc_x_m_s2",
+    "acc_y_m_s2",
+    "acc_z_m_s2",
+    "gyro_x_rad_s",
+    "gyro_y_rad_s",
+    "gyro_z_rad_s",
+    "acc_magnitude_m_s2",
+    "gyro_magnitude_rad_s"
+  ],
+  "labels": [
+    "walking",
+    "running",
+    "chair_transition",
+    "crouching",
+    "stumble",
+    "jumping",
+    "hand_activity",
+    "fall"
+  ],
+  "fall_label_index": 7,
+  "fall_threshold": 0.507464587688446,
+  "threshold_selected_on_validation": {
+    "threshold": 0.507464587688446,
+    "precision": 0.9041095890410958,
+    "recall": 0.8354430379746836,
+    "f1": 0.8684210526315789
+  },
+  "recommended_alert_policy": {
+    "threshold": 0.7999999999999998,
+    "minimum_positive_windows": 2,
+    "rolling_window_count": 3,
+    "user_cancellation_seconds": 15,
+    "alert_cooldown_seconds": 30,
+    "validation_result": {
+      "threshold": 0.7999999999999998,
+      "fall_events": 50,
+      "detected_fall_events": 47,
+      "fall_event_recall": 0.94,
+      "false_alerts": 2,
+      "nonfall_recording_hours": 0.2965333312643902,
+      "false_alerts_per_hour": 6.744604363604552
+    }
+  },
+  "runtime_physical_gate": {
+    "minimum_peak_acceleration_m_s2": 18.0,
+    "minimum_acceleration_range_m_s2": 12.0,
+    "minimum_peak_jerk_m_s3": 350.0,
+    "minimum_peak_angular_speed_rad_s": 2.5,
+    "reason": "Require a wrist impact so sitting and soft chair transitions do not alert from model confidence alone."
+  },
+  "subject_split": {
+    "train": [
+      "1",
+      "2",
+      "3",
+      "5",
+      "6",
+      "9",
+      "11",
+      "12",
+      "13",
+      "14",
+      "22",
+      "24",
+      "26",
+      "27",
+      "29",
+      "30",
+      "31"
+    ],
+    "validation": [
+      "4",
+      "10",
+      "23",
+      "25"
+    ],
+    "test": [
+      "7",
+      "8",
+      "21",
+      "28"
+    ]
+  },
+  "window_counts": {
+    "train": 4536,
+    "validation": 901,
+    "test": 1093
+  },
+  "test_metrics": {
+    "activity_accuracy": 0.8042086001829826,
+    "activity_macro_f1": 0.7448973579375449,
+    "fall_threshold": 0.507464587688446,
+    "fall_precision": 0.8343558282208589,
+    "fall_recall": 0.8143712574850299,
+    "fall_f1": 0.8242424242424242,
+    "classification_report": {
+      "walking": {
+        "precision": 0.8841463414634146,
+        "recall": 0.8405797101449275,
+        "f1-score": 0.861812778603269,
+        "support": 345.0
+      },
+      "running": {
+        "precision": 0.9787234042553191,
+        "recall": 0.9484536082474226,
+        "f1-score": 0.9633507853403142,
+        "support": 97.0
+      },
+      "chair_transition": {
+        "precision": 0.5833333333333334,
+        "recall": 0.8015267175572519,
+        "f1-score": 0.6752411575562701,
+        "support": 131.0
+      },
+      "crouching": {
+        "precision": 0.7959183673469388,
+        "recall": 0.65,
+        "f1-score": 0.7155963302752294,
+        "support": 60.0
+      },
+      "stumble": {
+        "precision": 0.7727272727272727,
+        "recall": 0.4358974358974359,
+        "f1-score": 0.5573770491803278,
+        "support": 39.0
+      },
+      "jumping": {
+        "precision": 0.6666666666666666,
+        "recall": 0.48,
+        "f1-score": 0.5581395348837209,
+        "support": 25.0
+      },
+      "hand_activity": {
+        "precision": 0.7866108786610879,
+        "recall": 0.8209606986899564,
+        "f1-score": 0.8034188034188035,
+        "support": 229.0
+      },
+      "fall": {
+        "precision": 0.8343558282208589,
+        "recall": 0.8143712574850299,
+        "f1-score": 0.8242424242424242,
+        "support": 167.0
+      },
+      "accuracy": 0.8042086001829826,
+      "macro avg": {
+        "precision": 0.7878102615843615,
+        "recall": 0.723973678502753,
+        "f1-score": 0.7448973579375449,
+        "support": 1093.0
+      },
+      "weighted avg": {
+        "precision": 0.8146502941943549,
+        "recall": 0.8042086001829826,
+        "f1-score": 0.8046526901866791,
+        "support": 1093.0
+      }
+    },
+    "alert_policy": {
+      "threshold": 0.7999999999999998,
+      "fall_events": 50,
+      "detected_fall_events": 48,
+      "fall_event_recall": 0.96,
+      "false_alerts": 3,
+      "nonfall_recording_hours": 0.36337777578565833,
+      "false_alerts_per_hour": 8.255870886747838
+    }
+  },
+  "tflite": {
+    "file": "activity_fall_model.tflite",
+    "size_bytes": 305296,
+    "verification": {
+      "input_shape": [
+        1,
+        128,
+        8
+      ],
+      "input_dtype": "<class 'numpy.float32'>",
+      "outputs": [
+        {
+          "index": 48,
+          "shape": [
+            1,
+            8
+          ],
+          "dtype": "<class 'numpy.float32'>"
+        },
+        {
+          "index": 51,
+          "shape": [
+            1,
+            1
+          ],
+          "dtype": "<class 'numpy.float32'>"
+        }
+      ],
+      "max_activity_probability_delta": 4.172325134277344e-07,
+      "max_fall_probability_delta": 5.587935447692871e-08,
+      "verified_examples": 32
+    }
+  },
+  "training": {
+    "epochs_requested": 45,
+    "epochs_completed": 23,
+    "batch_size": 64,
+    "seed": 42,
+    "best_validation_loss": 0.763329267501831
+  },
+  "limitations": [
+    "Use only at the body position represented by this dataset.",
+    "Dataset falls are staged; validate on the target Android phone/watch before emergency use.",
+    "Activity labels describe the dataset protocol and are not a clinical diagnosis."
+  ]
+}

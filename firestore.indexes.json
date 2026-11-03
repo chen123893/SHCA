@@ -1,0 +1,54 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "care_links",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "caregiverId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "care_links",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "elderlyId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "medication_records",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "elderlyId", "order": "ASCENDING" },
+        { "fieldPath": "scheduledAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "fall_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "elderlyId", "order": "ASCENDING" },
+        { "fieldPath": "detectedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "emergency_alerts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "elderlyId", "order": "ASCENDING" },
+        { "fieldPath": "recipientCaregiverIds", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "emergency_alerts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "recipientCaregiverIds", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

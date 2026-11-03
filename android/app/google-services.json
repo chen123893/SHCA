@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "255359410652",
+    "project_id": "shca-fyp",
+    "storage_bucket": "shca-fyp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:255359410652:android:4d3c36ee023590226d2f19",
+        "android_client_info": {
+          "package_name": "com.shca.shca"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "255359410652-7mq399et1s8j6vtr9o0b4afef58ahu84.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.shca.shca",
+            "certificate_hash": "b6fd9403b491dfd8b9bdbec87da74566bfa4d9d3"
+          }
+        },
+        {
+          "client_id": "255359410652-tvoa1rqaid3mqjna1a948aliujjnh1gh.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDRpjBro5Dm8KPcSUCaksqiB7Btw0-pdn0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "255359410652-tvoa1rqaid3mqjna1a948aliujjnh1gh.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "255359410652-q0vcq2d4lutbjae7hrimmh6lpr470e3o.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.shca.shca"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

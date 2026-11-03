@@ -1,0 +1,291 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function owns(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function currentUserHasRole(role) {
+      return signedIn()
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
+    }
+
+    function caregiverIsLinked(elderlyId) {
+      return signedIn()
+          && exists(/databases/$(database)/documents/care_links/$(request.auth.uid + '_' + elderlyId))
+          && get(/databases/$(database)/documents/care_links/$(request.auth.uid + '_' + elderlyId)).data.status == 'active';
+    }
+
+    function canReadElderlyData(elderlyId) {
+      return owns(elderlyId) || caregiverIsLinked(elderlyId);
+    }
+
+    function canAccessEmergencyAlert(data) {
+      return owns(data.elderlyId)
+          || (signedIn()
+              && request.auth.uid in data.recipientCaregiverIds
+              && caregiverIsLinked(data.elderlyId));
+    }
+
+    function validCareLinkLookup(data) {
+      return data.lookupId is string
+          && exists(/databases/$(database)/documents/care_link_lookups/$(data.lookupId))
+          && get(/databases/$(database)/documents/care_link_lookups/$(data.lookupId)).data.elderlyId == data.elderlyId;
+    }
+
+    // Transactions may check their own new deterministic document before it
+    // exists. Existing records still use the normal owner/link checks below.
+    function hasPrefix(value, prefix) {
+      return value.size() >= prefix.size() && value[0:prefix.size()] == prefix;
+    }
+
+    function validMedicationSchedule(data) {
+      return data.elderlyId is string
+          && data.scheduleKey is string
+          && data.scheduleKey.size() > 0
+          && data.name is string
+          && data.name.size() > 0
+          && data.name.size() <= 120
+          && data.dose is string
+          && data.dose.size() <= 80
+          && data.instruction is string
+          && data.instruction.size() > 0
+          && data.instruction.size() <= 240
+          && data.category is string
+          && data.category.size() <= 80
+          && data.visual is string
+          && data.visual in ['tablet', 'capsule', 'liquid', 'vitamin']
+          && data.imageKey is string
+          && data.imageKey.size() <= 300
+          && data.instructionSource is string
+          && data.sourceConfirmed is bool
+          && data.quantity is int
+          && data.quantity >= 1
+          && data.quantity <= 99
+          && (data.stockRemaining == null
+              || (data.stockRemaining is int && data.stockRemaining >= 0))
+          && data.hour is int
+          && data.hour >= 0
+          && data.hour <= 23
+          && data.minute is int
+          && data.minute >= 0
+          && data.minute <= 59
+          && data.recurrence is string
+          && data.recurrence in ['daily', 'selectedDays', 'intervalDays', 'oneTime', 'asNeeded']
+          && (data.startDate == null || data.startDate is timestamp)
+          && (data.endDate == null || data.endDate is timestamp)
+          && data.weekdays is list
+          && data.weekdays.size() <= 7
+          && data.intervalDays is int
+          && data.intervalDays >= 1
+          && data.intervalDays <= 365
+          && data.active is bool;
+    }
+
+    function validMedicationRecord(data, recordId) {
+      return data.elderlyId is string
+          && data.medicationId is string
+          && data.medicationId.size() > 0
+          && data.recordKey is string
+          && recordId == data.elderlyId + '_' + data.recordKey
+          && data.scheduledAt is timestamp
+          && data.status is string
+          && data.status in ['pending', 'taken', 'snoozed', 'missed'];
+    }
+
+    match /users/{userId} {
+      allow create: if owns(userId);
+      allow read, update, delete: if owns(userId);
+    }
+
+    match /elderly_profiles/{elderlyId} {
+      allow read: if canReadElderlyData(elderlyId);
+      allow create, update: if owns(elderlyId)
+          && request.resource.data.userId == elderlyId;
+      allow delete: if owns(elderlyId);
+    }
+
+    match /caregiver_profiles/{caregiverId} {
+      allow read, delete: if owns(caregiverId);
+      allow create, update: if owns(caregiverId)
+          && request.resource.data.userId == caregiverId;
+
+      match /push_tokens/{tokenId} {
+        allow read, delete: if owns(caregiverId);
+        allow create, update: if owns(caregiverId)
+            && request.resource.data.userId == caregiverId;
+      }
+    }
+
+    // An opted-in number is shared only with currently linked elderly accounts.
+    match /caregiver_sms_contacts/{caregiverId} {
+      allow get: if owns(caregiverId)
+          || (signedIn()
+              && get(/databases/$(database)/documents/care_links/$(caregiverId + '_' + request.auth.uid)).data.status == 'active');
+      allow create, update: if owns(caregiverId)
+          && currentUserHasRole('caregiver')
+          && request.resource.data.keys().hasOnly(['phone'])
+          && request.resource.data.phone is string
+          && request.resource.data.phone.matches('^[+][1-9][0-9]{8,14}$');
+      allow delete: if owns(caregiverId);
+    }
+
+    // Exact document lookups prevent listing names, emails, or phone numbers.
+    match /care_link_lookups/{lookupId} {
+      allow get: if signedIn() && currentUserHasRole('caregiver');
+      allow list: if false;
+      allow create: if signedIn()
+          && request.resource.data.elderlyId == request.auth.uid
+          && currentUserHasRole('elderly');
+      allow update: if signedIn()
+          && resource.data.elderlyId == request.auth.uid
+          && request.resource.data.elderlyId == request.auth.uid
+          && currentUserHasRole('elderly');
+      allow delete: if signedIn()
+          && (!exists(/databases/$(database)/documents/care_link_lookups/$(lookupId))
+              || resource.data.elderlyId == request.auth.uid);
+    }
+
+    match /care_links/{linkId} {
+      allow read: if signedIn()
+          && (resource.data.caregiverId == request.auth.uid
+              || resource.data.elderlyId == request.auth.uid);
+      allow create: if signedIn()
+          && request.resource.data.caregiverId == request.auth.uid
+          && currentUserHasRole('caregiver')
+          && request.resource.data.status == 'active'
+          && linkId == request.auth.uid + '_' + request.resource.data.elderlyId
+          && validCareLinkLookup(request.resource.data);
+      allow update: if signedIn()
+          && (resource.data.caregiverId == request.auth.uid
+              || resource.data.elderlyId == request.auth.uid)
+          && request.resource.data.caregiverId == resource.data.caregiverId
+          && request.resource.data.elderlyId == resource.data.elderlyId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'relationship',
+            'status',
+            'caregiverEmail',
+            'medicationEmailAlertsEnabled',
+            'lookupId',
+            'linkedAt'
+          ])
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['lookupId'])
+              || validCareLinkLookup(request.resource.data))
+          && (request.resource.data.status != 'active'
+              || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status'])
+              || validCareLinkLookup(request.resource.data));
+      allow delete: if signedIn()
+          && (resource.data.caregiverId == request.auth.uid
+              || resource.data.elderlyId == request.auth.uid);
+    }
+
+    match /medications/{medicationId} {
+      allow read: if canReadElderlyData(resource.data.elderlyId);
+      allow create: if caregiverIsLinked(request.resource.data.elderlyId)
+          && request.resource.data.createdByCaregiverId == request.auth.uid
+          && request.resource.data.updatedByCaregiverId == request.auth.uid
+          && medicationId == request.resource.data.elderlyId + '_' + request.resource.data.scheduleKey
+          && validMedicationSchedule(request.resource.data);
+      allow update: if (caregiverIsLinked(resource.data.elderlyId)
+              && request.resource.data.elderlyId == resource.data.elderlyId
+              && request.resource.data.scheduleKey == resource.data.scheduleKey
+              && (!('createdByCaregiverId' in resource.data)
+                  || request.resource.data.createdByCaregiverId == resource.data.createdByCaregiverId)
+              && request.resource.data.updatedByCaregiverId == request.auth.uid
+              && medicationId == request.resource.data.elderlyId + '_' + request.resource.data.scheduleKey
+              && validMedicationSchedule(request.resource.data))
+          || (owns(resource.data.elderlyId)
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                'stockRemaining',
+                'updatedAt'
+              ])
+              && resource.data.stockRemaining is int
+              && resource.data.quantity is int
+              && request.resource.data.stockRemaining ==
+                  (resource.data.stockRemaining > resource.data.quantity
+                      ? resource.data.stockRemaining - resource.data.quantity
+                      : 0));
+      allow delete: if caregiverIsLinked(resource.data.elderlyId);
+    }
+
+    match /medication_records/{recordId} {
+      allow get: if signedIn()
+          && hasPrefix(recordId, request.auth.uid + '_')
+          && !exists(/databases/$(database)/documents/medication_records/$(recordId));
+      allow read: if canReadElderlyData(resource.data.elderlyId);
+      allow create: if owns(request.resource.data.elderlyId)
+          && validMedicationRecord(request.resource.data, recordId);
+      allow update: if owns(resource.data.elderlyId)
+          && request.resource.data.elderlyId == resource.data.elderlyId
+          && request.resource.data.medicationId == resource.data.medicationId
+          && (!('recordKey' in resource.data)
+              || request.resource.data.recordKey == resource.data.recordKey)
+          && validMedicationRecord(request.resource.data, recordId);
+      allow delete: if owns(resource.data.elderlyId);
+    }
+
+    match /emergency_alerts/{alertId} {
+      allow get: if signedIn()
+          && hasPrefix(alertId, 'watch_' + request.auth.uid + '_')
+          && !exists(/databases/$(database)/documents/emergency_alerts/$(alertId));
+      allow create: if signedIn()
+          && request.resource.data.elderlyId == request.auth.uid
+          && currentUserHasRole('elderly')
+          && request.resource.data.status == 'active'
+          && request.resource.data.recipientCaregiverIds is list
+          && request.resource.data.recipientCaregiverIds.size() <= 20;
+      allow read: if canAccessEmergencyAlert(resource.data);
+      allow update: if canAccessEmergencyAlert(resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status',
+            'resolvedAt',
+            'resolvedByCaregiverId'
+          ])
+          && request.resource.data.status == 'resolved'
+          && request.resource.data.resolvedByCaregiverId == request.auth.uid;
+      allow delete: if signedIn()
+          && resource.data.elderlyId == request.auth.uid;
+    }
+
+    match /fall_events/{eventId} {
+      allow get: if signedIn()
+          && hasPrefix(eventId, 'watch_' + request.auth.uid + '_')
+          && !exists(/databases/$(database)/documents/fall_events/$(eventId));
+      allow create: if signedIn()
+          && request.resource.data.elderlyId == request.auth.uid;
+      allow read: if canReadElderlyData(resource.data.elderlyId);
+      allow update, delete: if owns(resource.data.elderlyId);
+    }
+
+    match /activity_status/{elderlyId} {
+      allow read: if canReadElderlyData(elderlyId);
+      allow create, update: if owns(elderlyId)
+          && currentUserHasRole('elderly')
+          && request.resource.data.elderlyId == elderlyId;
+      allow delete: if owns(elderlyId);
+    }
+
+    // A Wear OS device enrols a hardware-backed public key through the signed-in
+    // elderly phone. The private signing key never leaves the watch.
+    match /watch_credentials/{credentialId} {
+      allow read, delete: if owns(resource.data.elderlyId);
+      allow create: if signedIn()
+          && currentUserHasRole('elderly')
+          && request.resource.data.elderlyId == request.auth.uid
+          && request.resource.data.keyId == credentialId
+          && request.resource.data.algorithm == 'RS256'
+          && request.resource.data.publicKey is string
+          && request.resource.data.active == true;
+      allow update: if owns(resource.data.elderlyId)
+          && request.resource.data.elderlyId == resource.data.elderlyId
+          && request.resource.data.keyId == resource.data.keyId
+          && request.resource.data.publicKey == resource.data.publicKey
+          && request.resource.data.algorithm == resource.data.algorithm;
+    }
+  }
+}

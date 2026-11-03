@@ -1,0 +1,205 @@
+{
+  "dataset": "phone_main",
+  "model_role": "orientation-independent phone main-activity and fall model",
+  "sampling_rate_hz": 50,
+  "window_size": 128,
+  "step_size": 64,
+  "window_duration_s": 2.56,
+  "step_duration_s": 1.28,
+  "input_shape": [
+    1,
+    128,
+    2
+  ],
+  "input_dtype": "float32",
+  "feature_names": [
+    "acc_magnitude_m_s2",
+    "gyro_magnitude_rad_s"
+  ],
+  "labels": [
+    "resting",
+    "walking",
+    "running",
+    "active",
+    "fall"
+  ],
+  "fall_label_index": 4,
+  "fall_threshold": 0.35808032751083374,
+  "threshold_selected_on_validation": {
+    "threshold": 0.35808032751083374,
+    "precision": 1.0,
+    "recall": 0.9428571428571428,
+    "f1": 0.9705882352941176
+  },
+  "recommended_alert_policy": {
+    "threshold": 0.42499999999999993,
+    "minimum_positive_windows": 2,
+    "rolling_window_count": 3,
+    "user_cancellation_seconds": 15,
+    "alert_cooldown_seconds": 30,
+    "validation_result": {
+      "threshold": 0.42499999999999993,
+      "fall_events": 24,
+      "detected_fall_events": 23,
+      "fall_event_recall": 0.9583333333333334,
+      "false_alerts": 0,
+      "nonfall_recording_hours": 0.5023999882062277,
+      "false_alerts_per_hour": 0.0
+    }
+  },
+  "source_label_mapping": {
+    "standing": "resting",
+    "chair_transition": "resting",
+    "walking": "walking",
+    "running": "running",
+    "jumping": "active",
+    "fall": "fall"
+  },
+  "excluded_source_labels": [
+    "vehicle_transition"
+  ],
+  "subject_split": {
+    "train": [
+      "1",
+      "3",
+      "6",
+      "7",
+      "8",
+      "9",
+      "11",
+      "12",
+      "13",
+      "14",
+      "15",
+      "16",
+      "17",
+      "18",
+      "19",
+      "20",
+      "21",
+      "29",
+      "30",
+      "31"
+    ],
+    "validation": [
+      "4",
+      "10"
+    ],
+    "test": [
+      "2",
+      "5"
+    ]
+  },
+  "window_counts": {
+    "train": 4074,
+    "validation": 1431,
+    "test": 1434
+  },
+  "test_metrics": {
+    "activity_accuracy": 0.9881450488145049,
+    "activity_macro_f1": 0.9779231594343221,
+    "fall_threshold": 0.35808032751083374,
+    "fall_precision": 0.9863013698630136,
+    "fall_recall": 1.0,
+    "fall_f1": 0.993103448275862,
+    "classification_report": {
+      "resting": {
+        "precision": 0.9940357852882704,
+        "recall": 1.0,
+        "f1-score": 0.9970089730807578,
+        "support": 500.0
+      },
+      "walking": {
+        "precision": 0.996661101836394,
+        "recall": 0.995,
+        "f1-score": 0.9958298582151793,
+        "support": 600.0
+      },
+      "running": {
+        "precision": 1.0,
+        "recall": 0.9007633587786259,
+        "f1-score": 0.9477911646586346,
+        "support": 131.0
+      },
+      "active": {
+        "precision": 0.9219858156028369,
+        "recall": 0.9923664122137404,
+        "f1-score": 0.9558823529411765,
+        "support": 131.0
+      },
+      "fall": {
+        "precision": 0.9863013698630136,
+        "recall": 1.0,
+        "f1-score": 0.993103448275862,
+        "support": 72.0
+      },
+      "accuracy": 0.9881450488145049,
+      "macro avg": {
+        "precision": 0.9797968145181031,
+        "recall": 0.9776259541984732,
+        "f1-score": 0.9779231594343221,
+        "support": 1434.0
+      },
+      "weighted avg": {
+        "precision": 0.9887087825802513,
+        "recall": 0.9881450488145049,
+        "f1-score": 0.9880663044288174,
+        "support": 1434.0
+      }
+    },
+    "alert_policy": {
+      "threshold": 0.42499999999999993,
+      "fall_events": 24,
+      "detected_fall_events": 24,
+      "fall_event_recall": 1.0,
+      "false_alerts": 0,
+      "nonfall_recording_hours": 0.5027555438200632,
+      "false_alerts_per_hour": 0.0
+    }
+  },
+  "tflite": {
+    "file": "activity_fall_model.tflite",
+    "size_bytes": 172596,
+    "verification": {
+      "input_shape": [
+        1,
+        128,
+        2
+      ],
+      "input_dtype": "<class 'numpy.float32'>",
+      "outputs": [
+        {
+          "index": 48,
+          "shape": [
+            1,
+            5
+          ],
+          "dtype": "<class 'numpy.float32'>"
+        },
+        {
+          "index": 51,
+          "shape": [
+            1,
+            1
+          ],
+          "dtype": "<class 'numpy.float32'>"
+        }
+      ],
+      "max_activity_probability_delta": 5.960464477539063e-08,
+      "max_fall_probability_delta": 0.0,
+      "verified_examples": 32
+    }
+  },
+  "training": {
+    "epochs_requested": 45,
+    "epochs_completed": 21,
+    "batch_size": 64,
+    "seed": 42,
+    "best_validation_loss": 0.048890482634305954
+  },
+  "limitations": [
+    "Resting combines standing and chair activity because static sitting versus standing is not orientation-invariant in this dataset.",
+    "Sleeping is not supported because MobiAct contains no real sleeping/lying activity class.",
+    "Falls are staged; validate on the target Android phone before emergency use."
+  ]
+}

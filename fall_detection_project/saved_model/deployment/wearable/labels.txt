@@ -1,0 +1,8 @@
+walking
+running
+chair_transition
+crouching
+stumble
+jumping
+hand_activity
+fall

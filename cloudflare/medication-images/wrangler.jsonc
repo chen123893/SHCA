@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "shca-medication-images",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "vars": {
+    "FIREBASE_PROJECT_ID": "shca-fyp",
+    "FIREBASE_WEB_API_KEY": "AIzaSyDRpjBro5Dm8KPcSUCaksqiB7Btw0-pdn0",
+    "GROQ_MODEL": "openai/gpt-oss-20b"
+  },
+  "r2_buckets": [
+    {
+      "binding": "MEDICATION_IMAGES",
+      "bucket_name": "shca-medication-images"
+    }
+  ]
+}

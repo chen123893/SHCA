@@ -1,0 +1,7 @@
+standing
+walking
+running
+jumping
+chair_transition
+vehicle_transition
+fall

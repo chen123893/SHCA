@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Lets the phone verify that the SHCA watch app itself is reachable. -->
+    <string-array name="android_wear_capabilities">
+        <item>shca_watch_app</item>
+    </string-array>
+</resources>

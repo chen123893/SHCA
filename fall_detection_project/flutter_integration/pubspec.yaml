@@ -1,0 +1,12 @@
+name: fall_activity_integration
+description: Standalone integration example for the exported activity/fall models.
+publish_to: none
+version: 1.0.0
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  tflite_flutter: ^0.12.1
