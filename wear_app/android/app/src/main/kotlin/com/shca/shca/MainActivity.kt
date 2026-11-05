@@ -16,6 +16,7 @@ class MainActivity : FlutterActivity() {
     private val releaseSetupScreen = Runnable {
         window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
+    private var locationChannel: EmergencyLocationChannel? = null
     private var credentialResult: MethodChannel.Result? = null
     private var pendingLaunchEvent: Map<String, Any?>? = null
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -60,9 +61,15 @@ class MainActivity : FlutterActivity() {
             WatchFallConfirmation.begin(this, preview = true)
         }, 3000)
     }
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        locationChannel?.permissionResult(requestCode)
+    }
+
     override fun configureFlutterEngine(engine: FlutterEngine) {
         super.configureFlutterEngine(engine)
         val messenger = engine.dartExecutor.binaryMessenger
+        locationChannel = EmergencyLocationChannel(this, messenger) { WatchSession.userId(this) }
         EventChannel(messenger, EVENT_CHANNEL).setStreamHandler(object : EventChannel.StreamHandler {
             override fun onListen(arguments: Any?, events: EventChannel.EventSink?) { WatchEventBus.sink = events }
             override fun onCancel(arguments: Any?) { WatchEventBus.sink = null }

@@ -1,3 +1,4 @@
+import { type EmergencyLocation, locationFromFirestore, locationMapsUrl, locationDescription, parseEmergencyLocation } from "./emergency_location.ts";
 import { importPKCS8, SignJWT } from "jose";
 
 export interface EmergencyEnv {
@@ -129,6 +130,7 @@ async function deliverEmergencyEmails(
   token: string,
   recipients: CaregiverRecipient[],
   isFall: boolean,
+  location?: EmergencyLocation,
 ): Promise<{ emailAccepted: number; emailUnavailable: number; emailError?: string }> {
   let emailAccepted = 0, emailUnavailable = 0;
   if (!env.BREVO_API_KEY || !env.BREVO_SENDER_EMAIL) return {
@@ -148,6 +150,10 @@ async function deliverEmergencyEmails(
       const idempotencyKey = await emergencyEmailIdempotencyKey(receipt);
       const safeName = escapeHtml(elderlyName);
       const localTime = detectedAt.toLocaleString("en-MY", { timeZone: "Asia/Kuala_Lumpur" });
+      const locationText = location ? locationDescription(location) + "\n" + locationMapsUrl(location) : "Location unavailable for this alert.";
+      const locationHtml = location
+        ? "<p>" + escapeHtml(locationDescription(location)) + '</p><p><a href="' + escapeHtml(locationMapsUrl(location)) + '">Open location in Maps</a></p>'
+        : "<p>Location unavailable for this alert.</p>";
       const response = await fetch("https://api.brevo.com/v3/smtp/email", {
         method: "POST",
         headers: {
@@ -164,10 +170,12 @@ async function deliverEmergencyEmails(
           subject: isFall ? `Urgent: possible fall detected for ${elderlyName}` : `Urgent: SOS help requested by ${elderlyName}`,
           textContent:
             `SHCA ${isFall ? "detected a possible fall for" : "received an SOS help request from"} ${elderlyName} at ${localTime}.\n\n` +
+            locationText + "\n\n" +
             "Please contact them immediately and check the SHCA caregiver app for the active alert. Call emergency services if they may be injured or cannot respond.",
           htmlContent:
             `<h2 style="color:#c62828">${isFall ? "Possible fall detected" : "SOS help requested"}</h2>` +
             `<p>SHCA ${isFall ? "detected a possible fall for" : "received an SOS help request from"} <strong>${safeName}</strong> at <strong>${escapeHtml(localTime)}</strong>.</p>` +
+            locationHtml +
             `<p>Please contact them immediately and check the SHCA caregiver app for the active alert.</p>` +
             `<p><strong>Call emergency services if they may be injured or cannot respond.</strong></p>`,
           headers: { idempotencyKey },
@@ -201,6 +209,7 @@ async function deliverPush(
   alertId: string,
   token: string,
   linked?: string[],
+  location?: EmergencyLocation,
 ): Promise<Response> {
   const cached = await env.MEDICATION_IMAGES.get(`_push-deliveries/${uid}/${alertId}/result`);
   if (cached) return reply(await cached.json());
@@ -234,7 +243,11 @@ async function deliverPush(
           method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
           body: JSON.stringify({ message: { token: deviceToken,
             notification: { title: "SHCA: help requested", body: "Your linked elderly user needs assistance. Open SHCA to check the alert." },
-            data: { alertId, elderlyId: uid, type: "emergency" },
+            data: { alertId, elderlyId: uid, type: "emergency",
+              ...(location ? { mapsUrl: locationMapsUrl(location),
+                locationRecordedAt: String(location.recordedAt), locationSource: location.source,
+                locationKind: location.kind } : {}),
+            },
             android: { priority: "high", ttl: "900s", notification: { channel_id: "shca_emergency_alerts_v2", tag: alertId } },
           } }),
         });
@@ -264,11 +277,11 @@ async function deliverPush(
 /** Each channel runs independently; a push failure must not suppress email. */
 async function deliverEmergency(
   env: EmergencyEnv, uid: string, alertId: string, name: string, detectedAt: Date,
-  token: string, recipients: CaregiverRecipient[], isFall: boolean,
+  token: string, recipients: CaregiverRecipient[], isFall: boolean, location?: EmergencyLocation,
 ): Promise<Response> {
   const [push, email] = await Promise.allSettled([
-    deliverPush(env, uid, alertId, token, recipients.map(recipient => recipient.id)),
-    deliverEmergencyEmails(env, uid, alertId, name, detectedAt, token, recipients, isFall),
+    deliverPush(env, uid, alertId, token, recipients.map(recipient => recipient.id), location),
+    deliverEmergencyEmails(env, uid, alertId, name, detectedAt, token, recipients, isFall, location),
   ]);
   const pushResponse = push.status === "fulfilled" ? push.value : reply({
     accepted: 0, unavailable: recipients.length, linkedCaregivers: recipients.length,
@@ -302,7 +315,8 @@ export async function sendEmergencyPush(request: Request, env: EmergencyEnv, uid
     const isFall = type === "possible_fall" || type === "wearable_fall" || /fall/i.test(activity);
     const name = alert.fields?.elderlyName?.stringValue ??
       user.fields?.fullName?.stringValue ?? "Elderly user";
-    return await deliverEmergency(env, uid, alertId, name, new Date(createdAt), token, recipients, isFall);
+    return await deliverEmergency(env, uid, alertId, name, new Date(createdAt), token, recipients, isFall,
+      locationFromFirestore(alert.fields?.location, createdAt));
   } catch {
     return reply({ error: "Caregiver links could not be checked." }, 502);
   }
@@ -315,6 +329,7 @@ interface WatchRequest {
   source?: unknown;
   fallProbabilityPpm?: unknown;
   signature?: unknown;
+  locationJson?: unknown;
 }
 
 function decodeBase64(value: string): Uint8Array {
@@ -348,18 +363,19 @@ function fields(values: Record<string, unknown>): Record<string, unknown> {
     if (typeof value === "boolean") return [key, { booleanValue: value }];
     if (typeof value === "number") return [key, { doubleValue: value }];
     if (value instanceof Date) return [key, { timestampValue: value.toISOString() }];
+    if (value && typeof value === "object" && !Array.isArray(value)) return [key, { mapValue: { fields: fields(value as Record<string, unknown>) } }];
     if (Array.isArray(value)) return [key, { arrayValue: { values: value.map(item => ({ stringValue: item })) } }];
     throw new Error(`Unsupported Firestore field: ${key}`);
   }));
 }
 
-async function createDocument(env: EmergencyEnv, path: string, values: Record<string, unknown>, token: string): Promise<boolean> {
+async function createDocument(env: EmergencyEnv, path: string, values: Record<string, unknown>, token: string): Promise<"created" | "existing" | false> {
   const response = await fetch(`${base(env)}/${path}?currentDocument.exists=false`, {
     method: "PATCH",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
     body: JSON.stringify({ fields: fields(values) }),
   });
-  return response.ok || response.status === 409;
+  return response.ok ? "created" : response.status === 409 ? "existing" : false;
 }
 
 /**
@@ -393,7 +409,15 @@ export async function sendWatchEmergency(request: Request, env: EmergencyEnv): P
       typeof publicKey !== "string") {
     return reply({ error: "This watch is not enrolled." }, 401);
   }
-  const canonical = [credentialId, eventId, String(createdAt), source, String(probabilityPpm)].join("\n");
+  const locationJson = typeof body?.locationJson === "string" ? body.locationJson : "";
+  let location: EmergencyLocation | undefined;
+  if (body?.locationJson !== undefined) {
+    if (!locationJson || locationJson.length > 1024) return reply({ error: "Invalid alert location." }, 400);
+    try { location = parseEmergencyLocation(JSON.parse(locationJson), createdAt); } catch { /* Invalid JSON is rejected below. */ }
+    if (!location || location.source !== "watch") return reply({ error: "Invalid alert location." }, 400);
+  }
+  const canonical = [credentialId, eventId, String(createdAt), source, String(probabilityPpm)].join("\n") +
+    (locationJson ? "\n" + locationJson : "");
   if (!await verifyWatchSignature(publicKey, signature, canonical)) {
     return reply({ error: "Watch signature could not be verified." }, 401);
   }
@@ -422,9 +446,31 @@ export async function sendWatchEmergency(request: Request, env: EmergencyEnv): P
     emergencyContactPhone: phone,
     recipientCaregiverIds: linked,
     watchEventId: eventId,
+    ...(location ? { location } : {}),
     createdAt: detectedAt,
   }, userToken);
   if (!created) return reply({ error: "The watch alert could not be saved." }, 502);
+  if (created === "existing") {
+    // The paired phone may have saved this event first. Use its stored snapshot.
+    const saved = await read(env, `emergency_alerts/${alertId}`, token);
+    if (saved?.fields?.elderlyId?.stringValue !== uid || saved?.fields?.watchEventId?.stringValue !== eventId) {
+      return reply({ error: "The watch alert could not be verified." }, 403);
+    }
+    if (saved.fields?.status?.stringValue === "resolved") return reply({ accepted: 0, emailAccepted: 0, resolved: true });
+    const stored = locationFromFirestore(saved.fields?.location, Date.parse(saved.fields?.createdAt?.timestampValue ?? ""));
+    if (!saved.fields?.location && location) {
+      // A signed watch fix may arrive after the phone saved an alert without a fix.
+      // The owner-only rule allows filling this field once without changing the alert.
+      const filled = await fetch(`${base(env)}/emergency_alerts/${alertId}?updateMask.fieldPaths=location&currentDocument.exists=true`, {
+        method: "PATCH", headers: { authorization: `Bearer ${userToken}`, "content-type": "application/json" },
+        body: JSON.stringify({ fields: fields({ location }) }),
+      });
+      if (!filled.ok) {
+        const raced = await read(env, `emergency_alerts/${alertId}`, token);
+        location = locationFromFirestore(raced?.fields?.location, Date.parse(saved.fields?.createdAt?.timestampValue ?? ""));
+      }
+    } else location = stored;
+  }
   if (source === "wearable_fall") {
     await createDocument(env, `fall_events/${alertId}`, {
       elderlyId: uid,
@@ -437,7 +483,7 @@ export async function sendWatchEmergency(request: Request, env: EmergencyEnv): P
     }, userToken);
   }
   try {
-    return await deliverEmergency(env, uid, alertId, name, detectedAt, token, recipients, source === "wearable_fall");
+    return await deliverEmergency(env, uid, alertId, name, detectedAt, token, recipients, source === "wearable_fall", location);
   } catch {
     return reply({ error: "The alert was saved, but caregiver delivery could not be checked." }, 502);
   }

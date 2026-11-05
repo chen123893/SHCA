@@ -1,3 +1,4 @@
+import 'package:shca/widgets/emergency_location_settings.dart';
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -491,6 +492,7 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
                 value: _fallSmsEnabled!,
                 onChanged: _changingFallSms ? null : _setFallSms,
               ),
+            const EmergencyLocationSettings(),
             _linkCodeRow(),
           ],
         ),

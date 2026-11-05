@@ -6,6 +6,8 @@ import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shca/services/medication_service.dart'
+    show medicationQuantityFromText;
 
 const String medicationImageUserAgent = 'SHCA-Mobile/1.0';
 
@@ -236,6 +238,8 @@ class MedicationScanSuggestions {
     this.dose,
     this.instruction,
     this.category,
+    this.quantity,
+    this.reviewNotes = const [],
     this.visual = 'tablet',
   });
 
@@ -243,6 +247,8 @@ class MedicationScanSuggestions {
   final String? dose;
   final String? instruction;
   final String? category;
+  final int? quantity;
+  final List<String> reviewNotes;
   final String visual;
 }
 
@@ -255,26 +261,53 @@ MedicationScanSuggestions medicationSuggestionsFromText(String rawText) {
       .where((line) => line.isNotEmpty)
       .toList(growable: false);
   final searchable = lines.join(' ').toLowerCase();
+  final reviewNotes = <String>{};
+  final correctedNames = <String>{};
   final dosePattern = RegExp(
-    r'\b\d+(?:\.\d+)?\s*(?:mg|mcg|µg|g|ml|tablet(?:s)?|capsule(?:s)?|pill(?:s)?|biji)\b',
+    r'\b(\d+(?:[.,]\d+)?|satu|dua|tiga|empat|lima|enam|tujuh|lapan|sembilan|sepuluh)\s*(mg|mcg|µg|g|ml|iu|tablet(?:s)?|capsule(?:s)?|pill(?:s)?|biji|pil|kapsul)\b',
     caseSensitive: false,
   );
-
-  String? dose;
+  String? strength, quantityText;
+  final quantities = <int>{};
   for (final line in lines) {
-    final match = dosePattern.firstMatch(line);
-    if (match != null) {
-      dose = match.group(0);
-      break;
+    for (final match in dosePattern.allMatches(line)) {
+      // Never turn the denominator/end of a dose range into a whole dose.
+      final prefix = line.substring(0, match.start);
+      if (_ambiguousLabelAmountPrefix(prefix)) {
+        reviewNotes.add(
+          'The dose contains a fraction or range. Confirm it manually.',
+        );
+        continue;
+      }
+      final text = match.group(0)!.replaceAll(',', '.');
+      final unit = match.group(2)!.toLowerCase();
+      if (const {'mg', 'mcg', 'µg', 'g', 'ml', 'iu'}.contains(unit)) {
+        strength ??= text;
+      } else {
+        final value = medicationQuantityFromText(text);
+        if (value == null || value < 1 || value > 99) {
+          reviewNotes.add('The dose quantity needs manual confirmation.');
+        } else {
+          quantities.add(value);
+          quantityText ??= text;
+        }
+      }
     }
   }
+  if (quantities.length > 1) {
+    reviewNotes.add(
+      'Several dose quantities were found. Confirm the quantity manually.',
+    );
+  }
+  final quantity = quantities.length == 1 ? quantities.single : null;
+  final dose = strength ?? (quantities.length == 1 ? quantityText : null);
 
   final administrativeText = RegExp(
     r'\b(?:clinic|klinik|hospital|pharmacy|farmasi|patient|pesakit|prescription|doctor|doktor|dosage|expiry|batch|address|alamat|telephone|telefon|phone|date|tarikh|nama|jalan|taman|floor|penang|commercial|square|sdn|bhd|indication|indikasi)\b',
     caseSensitive: false,
   );
   final instructionText = RegExp(
-    r'\b(?:take|before|after|food|meal|once|twice|times|daily|morning|night|makan|minum|sebelum|selepas|kali|sehari|setiap|goncang)\b',
+    r'\b(?:take|before|after|food|meal|once|twice|times|daily|morning|night|makan|makanan|minum|sebelum|selepas|sesudah|lepas|bersama|semasa|kali|sehari|setiap|goncang|pagi|malam|biji|pil|kapsul)\b',
     caseSensitive: false,
   );
   final genericLabelText = RegExp(
@@ -321,22 +354,24 @@ MedicationScanSuggestions medicationSuggestionsFromText(String rawText) {
         .replaceAll(RegExp(r'\s*-\s*'), '-')
         .trim();
 
-    // Handwritten cholesterol labels are commonly read with "$" for S and
-    // "7" for T. Correct only this recognisable medicine fragment so numbers
-    // elsewhere on the package remain untouched.
-    final cholesterolCandidate = cleaned.replaceAll(r'$', 'S');
-    if (RegExp(
-      r'^ANTI-?CHOLE',
-      caseSensitive: false,
-    ).hasMatch(cholesterolCandidate)) {
-      cleaned = cholesterolCandidate.replaceAllMapped(
-        RegExp(r'([A-Za-z])7([A-Za-z])'),
-        (match) => '${match.group(1)}T${match.group(2)}',
-      );
-      cleaned = cleaned.replaceFirst(
-        RegExp(r'^ANTI-CHOLESTRO$', caseSensitive: false),
-        'ANTI-CHOLESTROL',
-      );
+    // Correct only this complete handwritten description, never drug names,
+    // strengths or quantities in general. It is a label description, not an
+    // identification of a particular cholesterol medicine.
+    final candidate = cleaned
+        .toUpperCase()
+        .replaceAll(r'$', 'S')
+        .replaceAll(RegExp(r'[\s-]'), '');
+    final handwritten = RegExp(
+      r'^AN[T7][I1L]CHOLE[S5][T7](E?)R[O0][L14]?$',
+    ).firstMatch(candidate);
+    if (handwritten != null) {
+      final corrected = handwritten.group(1) == 'E'
+          ? 'ANTI-CHOLESTEROL'
+          : 'ANTI-CHOLESTROL';
+      if (RegExp(r'[01745$]').hasMatch(candidate)) {
+        correctedNames.add(corrected);
+      }
+      cleaned = corrected;
     }
     return cleaned;
   }
@@ -401,44 +436,30 @@ MedicationScanSuggestions medicationSuggestionsFromText(String rawText) {
   // Returning no suggestion is safer than silently saving the wrong drug.
   if (bestNameScore < 3) name = null;
 
-  const instructionPhrases = <String>[
-    'before meal',
-    'after meal',
-    'with food',
-    'before food',
-    'after food',
-    'once daily',
-    'twice daily',
-    'three times daily',
-    'every day',
-    'at night',
-    'in the morning',
-  ];
-  String? instruction;
-  for (final phrase in instructionPhrases) {
-    if (!searchable.contains(phrase)) continue;
-    instruction = phrase
-        .split(' ')
-        .map(
-          (word) => word.isEmpty
-              ? word
-              : '${word[0].toUpperCase()}${word.substring(1)}',
-        )
-        .join(' ');
-    break;
-  }
-
   final visual =
-      searchable.contains('syrup') ||
-          searchable.contains('suspension') ||
-          searchable.contains('solution') ||
+      RegExp(
+            r'\b(?:syrup|sirap|suspension|suspensi|solution|larutan)\b',
+          ).hasMatch(searchable) ||
           searchable.contains(' ml')
       ? 'liquid'
-      : searchable.contains('capsule')
+      : RegExp(r'\b(?:capsules?|kapsul)\b').hasMatch(searchable)
       ? 'capsule'
-      : searchable.contains('vitamin') || searchable.contains('supplement')
+      : searchable.contains('vitamin') ||
+            searchable.contains('supplement') ||
+            searchable.contains('suplemen')
       ? 'vitamin'
       : 'tablet';
+  final instruction = _medicationLabelInstructions(
+    lines.join('\n'),
+    visual == 'liquid',
+    reviewNotes,
+  );
+  if (name != null && correctedNames.contains(name)) {
+    reviewNotes.add(
+      'Check the handwritten medicine description against the label.',
+    );
+  }
+
   final category = visual == 'vitamin'
       ? 'Supplement'
       : visual == 'liquid'
@@ -450,6 +471,167 @@ MedicationScanSuggestions medicationSuggestionsFromText(String rawText) {
     dose: dose,
     instruction: instruction,
     category: category,
+    quantity: quantity,
+    reviewNotes: List.unmodifiable(reviewNotes),
     visual: visual,
   );
 }
+
+String? _medicationLabelInstructions(
+  String text,
+  bool liquid,
+  Set<String> notes,
+) {
+  final lower = text.toLowerCase();
+  final meals = <String, String>{};
+  String title(String value) => value
+      .split(RegExp(r'\s+'))
+      .map(
+        (word) => word.isEmpty
+            ? word
+            : '${word[0].toUpperCase()}${word.substring(1)}',
+      )
+      .join(' ');
+  bool negated(int start) {
+    final prefix = lower.substring(0, start).split('\n').last;
+    if (!RegExp(r'\b(?:jangan|tidak|not|without)\b').hasMatch(prefix)) {
+      return false;
+    }
+    notes.add('A negated instruction was found. Confirm it manually.');
+    return true;
+  }
+
+  void meal(
+    String kind,
+    String pattern,
+    String canonical, {
+    bool english = false,
+  }) {
+    for (final match in RegExp(
+      pattern,
+      caseSensitive: false,
+    ).allMatches(lower)) {
+      if (negated(match.start)) continue;
+      meals.putIfAbsent(
+        kind,
+        () => english ? title(match.group(0)!) : canonical,
+      );
+    }
+  }
+
+  meal(
+    'before',
+    r'\bbefore\s+(?:meals?|food|eating)\b',
+    'Before Meal',
+    english: true,
+  );
+  meal(
+    'after',
+    r'\bafter\s+(?:meals?|food|eating)\b',
+    'After Meal',
+    english: true,
+  );
+  meal(
+    'with',
+    r'\b(?:with\s+(?:food|meals?)|during\s+meals?)\b',
+    'With Food',
+    english: true,
+  );
+  meal('before', r'\bsebelum\s+(?:makan|makanan)\b', 'Before Meal');
+  meal(
+    'after',
+    r'\b(?:selepas|sesudah|lepas)\s+(?:makan|makanan)\b',
+    'After Meal',
+  );
+  meal(
+    'with',
+    r'\b(?:bersama(?:\s+dengan)?|semasa|ketika)\s+(?:makan|makanan)\b',
+    'With Food',
+  );
+  final alternatives = RegExp(
+    r'\b(?:sebelum\s*(?:/|atau)\s*(?:selepas|sesudah|lepas)|(?:selepas|sesudah|lepas)\s*(?:/|atau)\s*sebelum)\s+(?:makan|makanan)\b|\b(?:before\s*(?:/|or)\s*after|after\s*(?:/|or)\s*before)\s+(?:meals?|food|eating)\b',
+  ).hasMatch(lower);
+  final parts = <String>[];
+  if (alternatives || meals.length > 1) {
+    notes.add(
+      'Both meal-timing options were found. Choose before or after meals manually.',
+    );
+  } else if (meals.isNotEmpty) {
+    parts.add(meals.values.single);
+  }
+
+  const numbers = {
+    'one': 1,
+    'two': 2,
+    'three': 3,
+    'four': 4,
+    'satu': 1,
+    'dua': 2,
+    'tiga': 3,
+    'empat': 4,
+  };
+  final frequencies = <int>{};
+  for (final match in RegExp(
+    r'\b(?:once\s+daily|sekali\s+sehari)\b',
+  ).allMatches(lower)) {
+    if (!negated(match.start)) frequencies.add(1);
+  }
+  for (final match in RegExp(r'\btwice\s+daily\b').allMatches(lower)) {
+    if (!negated(match.start)) frequencies.add(2);
+  }
+  for (final match in RegExp(
+    r'\b(\d+|one|two|three|four|satu|dua|tiga|empat)\s*(?:kali|times?)\s*(?:sehari|daily|(?:a|per)\s+day)\b',
+  ).allMatches(lower)) {
+    if (negated(match.start)) continue;
+    final prefix = lower.substring(0, match.start);
+    if (_ambiguousLabelAmountPrefix(prefix)) {
+      notes.add('A frequency range was found. Confirm it manually.');
+      continue;
+    }
+    final number = int.tryParse(match.group(1)!) ?? numbers[match.group(1)!];
+    if (number != null && number > 0 && number <= 24) frequencies.add(number);
+  }
+  // Preprinted alternatives such as "1 / 2 kali sehari" are not prescriptions.
+  if (RegExp(
+        r'\b(?:once|twice|\d+|satu|dua|tiga|empat|sekali)\s*(?:/|or|atau|[-–—])\s*(?:once|twice|\d+|satu|dua|tiga|empat|sekali)\s*(?:kali|times?)?\s*(?:daily|sehari|a\s+day)\b',
+      ).hasMatch(lower) ||
+      frequencies.length > 1) {
+    notes.add(
+      'Several daily-frequency options were found. Confirm them manually.',
+    );
+  } else if (frequencies.isNotEmpty) {
+    final value = frequencies.single;
+    parts.add(switch (value) {
+      1 => 'Once Daily',
+      2 => 'Twice Daily',
+      3 => 'Three Times Daily',
+      _ => '$value Times Daily',
+    });
+  } else if (RegExp(r'\b(?:every\s+day|setiap\s+hari)\b').hasMatch(lower)) {
+    parts.add('Every Day');
+  }
+  if (RegExp(
+    r'\b(?:at\s+night|pada\s+waktu\s+malam|waktu\s+malam)\b',
+  ).hasMatch(lower)) {
+    parts.add('At Night');
+  }
+  if (RegExp(
+    r'\b(?:in\s+the\s+morning|pada\s+waktu\s+pagi|waktu\s+pagi)\b',
+  ).hasMatch(lower)) {
+    parts.add('In The Morning');
+  }
+  if (liquid &&
+      RegExp(
+        r'\bgoncang\s+(?:(?:dengan\s+)?baik\s+)?sebelum\s+(?:minum|guna|digunakan)\b',
+      ).hasMatch(lower)) {
+    parts.add('Shake Before Use');
+  }
+  return parts.isEmpty ? null : parts.toSet().join('; ');
+}
+
+bool _ambiguousLabelAmountPrefix(String prefix) =>
+    RegExp(
+      r'(?:\d+(?:[.,]\d+)?|satu|dua|tiga|empat|lima|enam|tujuh|lapan|sembilan|sepuluh)\s*(?:/|[-–—]|to|hingga|atau|or)\s*$',
+      caseSensitive: false,
+    ).hasMatch(prefix) ||
+    RegExp(r'[-–—/]\s*$').hasMatch(prefix);

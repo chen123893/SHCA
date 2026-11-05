@@ -1,3 +1,4 @@
+import 'package:shca/widgets/alert_location_card.dart';
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -40,6 +41,7 @@ class CaregiverDashboardScreen extends StatefulWidget {
 class _CaregiverDashboardScreenState extends State<CaregiverDashboardScreen> {
   late final CareLinkRepository _repository;
   Future<List<LinkedElderly>>? _linkedFuture;
+  Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>>? _emergencyAlerts;
   List<LinkedElderly> _linkedElderly = const [];
   String _caregiverName = 'Caregiver';
   String? _caregiverId;
@@ -72,13 +74,13 @@ class _CaregiverDashboardScreenState extends State<CaregiverDashboardScreen> {
       setState(() {
         _caregiverId = user.uid;
         if (name != null && name.isNotEmpty) _caregiverName = name;
-        _linkedFuture = _loadLinked(user.uid);
+        _setLinkedFuture(user.uid, _loadLinked(user.uid));
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _caregiverId = user.uid;
-        _linkedFuture = Future<List<LinkedElderly>>.error(error);
+        _setLinkedFuture(user.uid, Future<List<LinkedElderly>>.error(error));
       });
     }
   }
@@ -89,12 +91,24 @@ class _CaregiverDashboardScreenState extends State<CaregiverDashboardScreen> {
     return linked;
   }
 
+  void _setLinkedFuture(
+    String caregiverId,
+    Future<List<LinkedElderly>> linked,
+  ) {
+    _linkedFuture = linked;
+    _emergencyAlerts = watchCaregiverEmergencyAlerts(
+      caregiverId: caregiverId,
+      elderlyIds: linked.then((people) => people.map((person) => person.id)),
+      limitPerElderly: 30,
+    );
+  }
+
   Future<void> _refresh() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
     setState(() {
       _refreshVersion++;
-      _linkedFuture = _loadLinked(uid);
+      _setLinkedFuture(uid, _loadLinked(uid));
     });
     await _linkedFuture;
   }
@@ -264,11 +278,7 @@ class _CaregiverDashboardScreenState extends State<CaregiverDashboardScreen> {
     final caregiverId = _caregiverId;
     if (caregiverId == null) return const _LoadingCard(compact: true);
     return StreamBuilder<List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
-      stream: watchCaregiverEmergencyAlerts(
-        caregiverId: caregiverId,
-        elderlyIds: (_linkedFuture ?? Future.value(const <LinkedElderly>[]))
-            .then((people) => people.map((person) => person.id)),
-      ),
+      stream: _emergencyAlerts,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return const _MessageCard(
@@ -305,21 +315,31 @@ class _CaregiverDashboardScreenState extends State<CaregiverDashboardScreen> {
           alert['elderlyName'],
           'Linked elderly',
         );
-        final alertType = alert['type'] == 'manual_sos' ? 'SOS' : 'fall alert';
-        return _HorizontalStatusCard(
-          icon: Icons.sos_rounded,
-          title: '$elderlyName needs attention',
-          subtitle: 'An active $alertType was received. Open their status now.',
-          badge: 'Urgent',
-          color: _red,
-          onTap: () {
-            final elderlyId = alert['elderlyId'] as String?;
-            LinkedElderly? match;
-            for (final elderly in _linkedElderly) {
-              if (elderly.id == elderlyId) match = elderly;
-            }
-            if (match != null) _openStatus(match);
-          },
+        final alertType =
+            const ['manual_sos', 'wearable_sos'].contains(alert['type'])
+            ? 'SOS'
+            : 'fall alert';
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _HorizontalStatusCard(
+              icon: Icons.sos_rounded,
+              title: '$elderlyName needs attention',
+              subtitle:
+                  'An active $alertType was received. Open their status now.',
+              badge: 'Urgent',
+              color: _red,
+              onTap: () {
+                final elderlyId = alert['elderlyId'] as String?;
+                LinkedElderly? match;
+                for (final elderly in _linkedElderly) {
+                  if (elderly.id == elderlyId) match = elderly;
+                }
+                if (match != null) _openStatus(match);
+              },
+            ),
+            AlertLocationCard(location: alert['location']),
+          ],
         );
       },
     );
@@ -667,7 +687,10 @@ class _ActiveEmergencyPanelState extends State<_ActiveEmergencyPanel> {
         }
         if (active == null) return const SizedBox.shrink();
         final data = active.data();
-        final automatic = data['type'] != 'manual_sos';
+        final automatic = !const [
+          'manual_sos',
+          'wearable_sos',
+        ].contains(data['type']);
         return _SurfaceCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -697,7 +720,8 @@ class _ActiveEmergencyPanelState extends State<_ActiveEmergencyPanel> {
                   ),
                 ],
               ),
-              const SizedBox(height: 13),
+              AlertLocationCard(location: data['location']),
+              const SizedBox(height: 4),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(

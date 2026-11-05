@@ -35,9 +35,8 @@ class FallSmsWorker(context: Context, parameters: WorkerParameters) : Worker(con
         val uid = inputData.getString("uid") ?: return Result.failure()
         val eventId = inputData.getString("eventId") ?: return Result.failure()
         val detectedAt = inputData.getLong("detectedAt", 0)
-        val message = if (inputData.getBoolean("manualSos", false))
-            "SHCA SOS: A linked elderly person requested help. Please call them and check if they are safe."
-        else FALL_MESSAGE
+        val location = EmergencyLocation.fromJson(inputData.getString("locationJson"))
+        val message = EmergencySmsMessage.format(inputData.getBoolean("manualSos", false), location)
         if (!canSend(context, uid, detectedAt)) return Result.success()
 
         val subscription = SubscriptionManager.getDefaultSmsSubscriptionId()
@@ -79,13 +78,18 @@ class FallSmsWorker(context: Context, parameters: WorkerParameters) : Worker(con
             for (phone in phones) {
                 if (!canSend(context, uid, detectedAt)) break
                 val key = digest("$uid/$eventId/$phone")
-                val sent = PendingIntent.getBroadcast(context, 0,
-                    Intent(context, FallSmsSentReceiver::class.java)
-                        .setData(Uri.parse("shca-fall-sms:$key")),
-                    PendingIntent.FLAG_IMMUTABLE)
                 if (!claim(context, key)) continue
                 try {
-                    sms.sendTextMessage(phone, null, message, sent, null)
+                    val parts = sms.divideMessage(message)
+                    val callbacks = ArrayList(parts.indices.map { index ->
+                        PendingIntent.getBroadcast(context, 0,
+                            Intent(context, FallSmsSentReceiver::class.java)
+                                .setData(Uri.parse("shca-fall-sms:$key/$index"))
+                                .putExtra("partIndex", index).putExtra("partCount", parts.size),
+                            PendingIntent.FLAG_IMMUTABLE)
+                    })
+                    if (parts.size == 1) sms.sendTextMessage(phone, null, message, callbacks[0], null)
+                    else sms.sendMultipartTextMessage(phone, null, parts, callbacks, null)
                 } catch (error: Exception) {
                     Log.w(TAG, "Fall SMS submission failed: ${error.javaClass.simpleName}")
                 }
@@ -101,7 +105,6 @@ class FallSmsWorker(context: Context, parameters: WorkerParameters) : Worker(con
         private const val TAG = "SHCAFallSms"
         private const val PREFS = "shca_fall_sms"
         private const val MAX_AGE = 15 * 60_000L
-        private const val FALL_MESSAGE = "SHCA fall alert: A linked elderly person may have fallen. Please call them and check if they are safe."
         private val PHONE = Regex("^[+][1-9][0-9]{8,14}$")
 
         fun hasPermission(context: Context) =
@@ -120,11 +123,12 @@ class FallSmsWorker(context: Context, parameters: WorkerParameters) : Worker(con
                 isEnabled(context, uid) &&
                 System.currentTimeMillis() - detectedAt in 0..MAX_AGE
 
-        fun enqueue(context: Context, uid: String, eventId: String, detectedAt: Long, manualSos: Boolean = false): Boolean {
+        fun enqueue(context: Context, uid: String, eventId: String, detectedAt: Long, manualSos: Boolean = false, location: Map<String, Any>? = null): Boolean {
             if (!canSend(context, uid, detectedAt)) return false
             return try {
                 val request = OneTimeWorkRequestBuilder<FallSmsWorker>()
-                    .setInputData(workDataOf("uid" to uid, "eventId" to eventId, "detectedAt" to detectedAt, "manualSos" to manualSos))
+                    .setInputData(workDataOf("uid" to uid, "eventId" to eventId, "detectedAt" to detectedAt, "manualSos" to manualSos,
+                        "locationJson" to location?.let { org.json.JSONObject(it).toString() }))
                     .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                     .build()
                 WorkManager.getInstance(context).enqueueUniqueWork(
@@ -160,7 +164,9 @@ class FallSmsWorker(context: Context, parameters: WorkerParameters) : Worker(con
 
 class FallSmsSentReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (resultCode == Activity.RESULT_OK) Log.i("SHCAFallSms", "Fall SMS sent by the phone.")
-        else Log.w("SHCAFallSms", "Carrier SMS submission failed with result $resultCode.")
+        val part = intent.getIntExtra("partIndex", 0) + 1
+        val count = intent.getIntExtra("partCount", 1)
+        if (resultCode == Activity.RESULT_OK) Log.i("SHCAFallSms", "SMS part $part/$count accepted by the phone network.")
+        else Log.w("SHCAFallSms", "SMS part $part/$count failed with result $resultCode.")
     }
 }

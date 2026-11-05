@@ -88,10 +88,40 @@ class PhoneMonitoringService : Service() {
                                 val detectedAt = (fall["detectedAt"] as? Number)?.toLong()
                                 val uid = FirebaseAuth.getInstance().currentUser?.uid
                                 if (uid != null && id != null && detectedAt != null) {
-                                    FallSmsWorker.enqueue(this, uid, id, detectedAt)
+                                    FallSmsWorker.enqueue(this, uid, id, detectedAt,
+                                        location = EmergencyLocation.fromJson(call.argument<String>("locationJson")))
                                 }
                             }
                             result.success(null)
+                        }
+                        "captureLocation" -> {
+                            val uid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+                            val fall = pending(this)
+                            if (fall?.get("status") != "confirmed") { result.success(null); return@setMethodCallHandler }
+                            Thread {
+                                val location = if (!EmergencyLocation.isEnabled(applicationContext, uid)) null
+                                    else if (fall["locationChecked"] == true) EmergencyLocation.fromJson(fall["locationJson"] as? String)
+                                    else EmergencyLocation.capture(applicationContext, uid, "phone")
+                                handler.post {
+                                    val sameEvent = ownsSession(this) && FirebaseAuth.getInstance().currentUser?.uid == uid &&
+                                        pending(this)?.get("eventId") == fall["eventId"]
+                                    if (sameEvent) {
+                                        val saved = JSONObject(pending(this)!!).put("locationChecked", true)
+                                        if (location != null) saved.put("locationJson", JSONObject(location).toString())
+                                        else saved.remove("locationJson")
+                                        prefs(this).edit().putString("pending", saved.toString()).commit()
+                                    }
+                                    result.success(if (sameEvent) location else null)
+                                }
+                            }.start()
+                        }
+                        "callFallContact" -> {
+                            val fall = pending(this)
+                            val id = fall?.get("eventId") as? String
+                            val detectedAt = (fall?.get("detectedAt") as? Number)?.toLong()
+                            result.success(fall?.get("status") == "confirmed" &&
+                                id != null && detectedAt != null &&
+                                EmergencyContactCall.request(this, call.argument<String>("phone"), "phone_$id", detectedAt))
                         }
                         "clearPendingFall" -> { prefs(this).edit().remove("pending").commit(); result.success(null) }
                         "showFallWarning" -> { showFallWarning(); result.success(null) }

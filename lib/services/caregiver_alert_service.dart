@@ -10,24 +10,64 @@ watchCaregiverEmergencyAlerts({
   required Future<Iterable<String>> elderlyIds,
   FirebaseFirestore? firestore,
   int limitPerElderly = 30,
-}) async* {
-  final ids = (await elderlyIds).where((id) => id.isNotEmpty).toSet();
-  if (ids.isEmpty) {
-    yield const [];
-    return;
+}) {
+  // Handle loading errors now, even when a lazy list has not mounted its alert
+  // card yet. Keep the result so every later subscriber receives the same IDs
+  // or a stream error rather than an unhandled Future error.
+  final linked = _resolveAlertAccounts(elderlyIds);
+  return Stream.multi((controller) {
+    var cancelled = false;
+    Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>> load() async* {
+      final result = await linked;
+      if (cancelled) return;
+      if (result.error != null) {
+        Error.throwWithStackTrace(result.error!, result.stackTrace!);
+      }
+      if (result.ids.isEmpty) {
+        yield const [];
+        return;
+      }
+      final db = firestore ?? FirebaseFirestore.instance;
+      yield* mergeCaregiverAlertStreams([
+        for (final id in result.ids)
+          db
+              .collection('emergency_alerts')
+              .where('elderlyId', isEqualTo: id)
+              .where('recipientCaregiverIds', arrayContains: caregiverId)
+              .orderBy('createdAt', descending: true)
+              .limit(limitPerElderly)
+              .snapshots()
+              .map((snapshot) => snapshot.docs),
+      ]);
+    }
+
+    // A list item may be disposed and recreated as account cards load or the
+    // user scrolls. Every listener gets fresh query streams and merge state.
+    final subscription = load().listen(
+      controller.addSync,
+      onError: controller.addErrorSync,
+      onDone: controller.closeSync,
+    );
+    controller.onPause = subscription.pause;
+    controller.onResume = subscription.resume;
+    controller.onCancel = () {
+      cancelled = true;
+      return subscription.cancel();
+    };
+  });
+}
+
+Future<({Set<String> ids, Object? error, StackTrace? stackTrace})>
+_resolveAlertAccounts(Future<Iterable<String>> elderlyIds) async {
+  try {
+    return (
+      ids: (await elderlyIds).where((id) => id.isNotEmpty).toSet(),
+      error: null,
+      stackTrace: null,
+    );
+  } catch (error, stackTrace) {
+    return (ids: <String>{}, error: error, stackTrace: stackTrace);
   }
-  final db = firestore ?? FirebaseFirestore.instance;
-  yield* mergeCaregiverAlertStreams([
-    for (final id in ids)
-      db
-          .collection('emergency_alerts')
-          .where('elderlyId', isEqualTo: id)
-          .where('recipientCaregiverIds', arrayContains: caregiverId)
-          .orderBy('createdAt', descending: true)
-          .limit(limitPerElderly)
-          .snapshots()
-          .map((snapshot) => snapshot.docs),
-  ]);
 }
 
 /// Waits for every account's first result and replaces, rather than appends,

@@ -847,7 +847,8 @@ UBAT TERKAWAL / CONTROLLED MEDICINE / 管制药物
     expect(suggestions.name, isNot(contains('CONTROLLED')));
     expect(suggestions.name, isNot(contains('TERKAWAL')));
     expect(suggestions.dose, '1 Biji');
-    expect(suggestions.instruction, 'Before Food');
+    expect(suggestions.quantity, 1);
+    expect(suggestions.instruction, 'Before Food; Once Daily');
   });
 
   test('inline medicine-name labels work across common wording', () {

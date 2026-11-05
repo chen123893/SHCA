@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:shca/services/emergency_location_service.dart';
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -455,11 +457,6 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     final message =
         monitor.deliveryMessage ?? 'Check caregiver alert delivery.';
     final phone = _emergencyPhone.trim();
-    if (phone.isNotEmpty) {
-      try {
-        await _openEmergencyDialler(phone);
-      } catch (_) {}
-    }
     if (!mounted) return;
     await showDialog<void>(
       context: context,
@@ -494,11 +491,6 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     setState(() => _isSendingSos = true);
     try {
       final phone = _emergencyPhone.trim();
-      if (phone.isEmpty && !isAutomatic) {
-        throw StateError(
-          'Add an emergency contact number in the elderly profile first.',
-        );
-      }
       final user = FirebaseAuth.instance.currentUser;
       Object? recordError;
       EmergencyPushResult? pushResult;
@@ -507,13 +499,9 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
       final alert = user == null
           ? null
           : FirebaseFirestore.instance.collection('emergency_alerts').doc();
-      if (alert != null && !isAutomatic) {
-        smsFuture = _invokeSosAction('queueSms', {'eventId': alert.id});
-      }
       Future<({bool callRequested, bool diallerOpened})> contact() async {
         if (phone.isEmpty) return (callRequested: false, diallerOpened: false);
-        if (!isAutomatic &&
-            await _invokeSosAction('callContact', {'phone': phone})) {
+        if (await _invokeSosAction('callContact', {'phone': phone})) {
           return (callRequested: true, diallerOpened: false);
         }
         try {
@@ -524,8 +512,16 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
         }
       }
 
-      // Start the manual SOS call without waiting for Firestore.
-      final callFuture = isAutomatic ? null : contact();
+      final callFuture = contact();
+      final location = await EmergencyLocationService.capture();
+      if (FirebaseAuth.instance.currentUser?.uid != user?.uid) return;
+      if (alert != null) {
+        smsFuture = _invokeSosAction('queueSms', {
+          'eventId': alert.id,
+          'manualSos': !isAutomatic,
+          if (location != null) 'locationJson': jsonEncode(location),
+        });
+      }
       if (user != null && alert != null) {
         try {
           await alert
@@ -540,6 +536,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
                     ? 'watch'
                     : 'phone',
                 'emergencyContactPhone': phone,
+                if (location != null) 'location': location,
                 'recipientCaregiverIds': _linkedCaregiverIds,
                 'createdAt': FieldValue.serverTimestamp(),
               })
@@ -552,7 +549,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
         recordError = StateError('Sign in is required to notify caregivers.');
       }
 
-      final call = await (callFuture ?? contact());
+      final call = await callFuture;
       final smsQueued = await smsFuture ?? false;
       if (pushFuture != null) pushResult = await pushFuture;
       if (!mounted) return;
@@ -570,6 +567,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
               ? 'Caregiver alert submitted'
               : 'SOS saved — check delivery',
           deliveryMessage: [
+            if (phone.isEmpty) 'No emergency contact number is set.',
             if (call.callRequested)
               'Call requested for your emergency contact.',
             if (call.diallerOpened) 'Tap Call in the phone dialler.',
@@ -599,7 +597,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
 
   Future<bool> _invokeSosAction(
     String method,
-    Map<String, String> arguments,
+    Map<String, Object> arguments,
   ) async {
     try {
       return await const MethodChannel(

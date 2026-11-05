@@ -345,10 +345,24 @@ String _shortDate(DateTime value) =>
 
 int? medicationQuantityFromText(String? value) {
   final match = RegExp(
-    r'^\s*(\d+)\s*(?:tablet|tablets|capsule|capsules|dose|doses)\s*$',
+    r'^\s*(\d+|satu|dua|tiga|empat|lima|enam|tujuh|lapan|sembilan|sepuluh)\s*(?:tablet|tablets|capsule|capsules|dose|doses|pill|pills|biji|pil|kapsul)\s*$',
     caseSensitive: false,
   ).firstMatch(value ?? '');
-  return match == null ? null : int.tryParse(match.group(1)!);
+  if (match == null) return null;
+  final amountText = match.group(1)!.toLowerCase();
+  return int.tryParse(amountText) ??
+      const {
+        'satu': 1,
+        'dua': 2,
+        'tiga': 3,
+        'empat': 4,
+        'lima': 5,
+        'enam': 6,
+        'tujuh': 7,
+        'lapan': 8,
+        'sembilan': 9,
+        'sepuluh': 10,
+      }[amountText];
 }
 
 String medicationStrengthFromText(String? value) =>

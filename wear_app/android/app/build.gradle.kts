@@ -5,6 +5,7 @@ plugins {
 }
 
 android {
+    sourceSets.getByName("main").java.srcDir(rootProject.file("../../shared/android"))
     namespace = "com.shca.shca"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion

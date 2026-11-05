@@ -229,6 +229,19 @@ service cloud.firestore {
       allow delete: if owns(resource.data.elderlyId);
     }
 
+    function validEmergencyLocation(location) {
+      return location is map
+          && location.keys().hasOnly(['latitude', 'longitude', 'recordedAt', 'accuracyMeters', 'source', 'kind'])
+          && location.latitude is number && location.latitude >= -90 && location.latitude <= 90
+          && location.longitude is number && location.longitude >= -180 && location.longitude <= 180
+          && location.recordedAt is number
+          && location.recordedAt >= request.time.toMillis() - 86400000
+          && location.recordedAt <= request.time.toMillis() + 60000
+          && location.accuracyMeters is number && location.accuracyMeters >= 0 && location.accuracyMeters <= 100000
+          && location.source in ['phone', 'watch']
+          && location.kind in ['current', 'last_known'];
+    }
+
     match /emergency_alerts/{alertId} {
       allow get: if signedIn()
           && hasPrefix(alertId, 'watch_' + request.auth.uid + '_')
@@ -238,8 +251,13 @@ service cloud.firestore {
           && currentUserHasRole('elderly')
           && request.resource.data.status == 'active'
           && request.resource.data.recipientCaregiverIds is list
-          && request.resource.data.recipientCaregiverIds.size() <= 20;
+          && request.resource.data.recipientCaregiverIds.size() <= 20
+          && (!('location' in request.resource.data) || validEmergencyLocation(request.resource.data.location));
       allow read: if canAccessEmergencyAlert(resource.data);
+      allow update: if owns(resource.data.elderlyId)
+          && !('location' in resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['location'])
+          && validEmergencyLocation(request.resource.data.location);
       allow update: if canAccessEmergencyAlert(resource.data)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'status',

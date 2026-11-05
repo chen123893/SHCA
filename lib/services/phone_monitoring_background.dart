@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -209,15 +210,46 @@ class _PhoneMonitoringWorker {
     }
     _delivering = true;
     final value = _pending!;
-    try {
+    // SIM delivery can proceed even if loading the online profile fails.
+    final locationFuture = () async {
+      Map<String, dynamic>? location;
       try {
-        await _channel.invokeMethod<void>('queueFallSms');
+        location = await _channel.invokeMapMethod<String, dynamic>(
+          'captureLocation',
+        );
+      } on PlatformException {
+        // Permission/GPS failures must not suppress an emergency alert.
+      }
+      if (!_ownsSession) return null;
+      try {
+        await _channel.invokeMethod<void>('queueFallSms', {
+          if (location != null) 'locationJson': jsonEncode(location),
+        });
       } on PlatformException catch (error) {
         debugPrint('Could not queue fall SMS: ${error.code}');
       }
+      return location;
+    }();
+    try {
       final profile = await FirestoreProfileRepository()
           .loadElderlyProfile(_userId)
           .timeout(const Duration(seconds: 20));
+      if (!_ownsSession) return;
+      final phone = profile?.emergencyPhone ?? '';
+      var callRequested = false;
+      try {
+        if (phone.isNotEmpty) {
+          callRequested =
+              await _channel.invokeMethod<bool>('callFallContact', {
+                'phone': phone,
+              }) ??
+              false;
+        }
+      } on PlatformException catch (error) {
+        debugPrint('Could not request fall call: ${error.code}');
+      }
+      final location = await locationFuture;
+      if (!_ownsSession) return;
       final caregivers = await FirestoreCareLinkRepository()
           .loadLinkedCaregiverIds(_userId)
           .timeout(const Duration(seconds: 20));
@@ -237,7 +269,8 @@ class _PhoneMonitoringWorker {
               'activity': value['label'],
               'fallProbability': value['fallProbability'],
               'sensorSource': 'phone',
-              'emergencyContactPhone': profile?.emergencyPhone ?? '',
+              'emergencyContactPhone': phone,
+              if (location != null) 'location': location,
               'recipientCaregiverIds': caregivers,
               'createdAt': Timestamp.fromMillisecondsSinceEpoch(
                 value['detectedAt'] as int,
@@ -276,7 +309,13 @@ class _PhoneMonitoringWorker {
       await _channel.invokeMethod<void>('deliveryStatus', {
         'eventId': id,
         'title': 'Caregiver alert submitted',
-        'message': delivery.deliverySummary,
+        'message': [
+          if (phone.isEmpty) 'No emergency contact number is set.',
+          if (callRequested) 'Call requested for your emergency contact.',
+          if (phone.isNotEmpty && !callRequested)
+            'Automatic call unavailable. Check SHCA’s Phone permission.',
+          delivery.deliverySummary,
+        ].join('\n\n'),
       });
       _pending = null;
       await _channel.invokeMethod<void>('clearPendingFall');

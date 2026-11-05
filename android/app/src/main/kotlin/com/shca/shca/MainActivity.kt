@@ -17,6 +17,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private data class SosCallRequest(val uid: String, val phone: String, val result: MethodChannel.Result)
+    private var locationChannel: EmergencyLocationChannel? = null
     private var sosCallRequest: SosCallRequest? = null
     private var smsPermissionRequest: Pair<String, MethodChannel.Result>? = null
     private var monitoringEventSink: EventChannel.EventSink? = null
@@ -57,12 +58,13 @@ class MainActivity : FlutterActivity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (locationChannel?.permissionResult(requestCode) == true) return
         if (requestCode == 9461) {
             val request = sosCallRequest ?: return
             sosCallRequest = null
             val granted = grantResults.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED
             val stillSignedIn = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid == request.uid
-            request.result.success(granted && stillSignedIn && placeSosCall(request.phone))
+            request.result.success(granted && stillSignedIn && EmergencyContactCall.request(this, request.phone))
             return
         }
         if (requestCode == 9460) {
@@ -96,18 +98,12 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun placeSosCall(phone: String): Boolean = try {
-        startActivity(Intent(Intent.ACTION_CALL, Uri.fromParts("tel", phone, null)))
-        true
-    } catch (_: SecurityException) {
-        false
-    } catch (_: android.content.ActivityNotFoundException) {
-        false
-    }
-
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         val messenger = flutterEngine.dartExecutor.binaryMessenger
+        locationChannel = EmergencyLocationChannel(this, messenger) {
+            com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: ""
+        }
         MethodChannel(messenger, "com.shca.shca/sos").setMethodCallHandler { call, result ->
             val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
             when (call.method) {
@@ -115,16 +111,17 @@ class MainActivity : FlutterActivity() {
                     val eventId = call.argument<String>("eventId")
                     result.success(uid != null && eventId != null &&
                         eventId.matches(Regex("[A-Za-z0-9_-]{1,100}")) &&
-                        FallSmsWorker.enqueue(this, uid, eventId, System.currentTimeMillis(), manualSos = true))
+                        FallSmsWorker.enqueue(this, uid, eventId, System.currentTimeMillis(), manualSos = call.argument<Boolean>("manualSos") != false,
+                            location = EmergencyLocation.fromJson(call.argument<String>("locationJson"))))
                 }
                 "callContact" -> {
-                    val phone = call.argument<String>("phone")?.trim()?.replace(Regex("[ ()-]"), "")
+                    val phone = EmergencyContactCall.normalize(call.argument<String>("phone"))
                     when {
-                        uid == null || phone == null || !phone.matches(Regex("[+]?[0-9]{7,15}")) ->
+                        uid == null || phone == null ->
                             result.success(false)
                         checkSelfPermission(android.Manifest.permission.CALL_PHONE) ==
                             android.content.pm.PackageManager.PERMISSION_GRANTED ->
-                            result.success(placeSosCall(phone))
+                            result.success(EmergencyContactCall.request(this, phone))
                         sosCallRequest != null -> result.success(false)
                         else -> {
                             sosCallRequest = SosCallRequest(uid, phone, result)

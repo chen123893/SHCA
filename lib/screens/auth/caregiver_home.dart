@@ -1,3 +1,4 @@
+import 'package:shca/widgets/alert_location_card.dart';
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -29,6 +30,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
 
   late final CareLinkRepository _repository;
   Future<List<LinkedElderly>>? _linkedFuture;
+  Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>>? _emergencyAlerts;
   String _caregiverName = 'Caregiver';
   String? _caregiverId;
   bool _signingOut = false;
@@ -59,14 +61,26 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
     setState(() {
       _caregiverId = user.uid;
       if (name != null && name.isNotEmpty) _caregiverName = name;
-      _linkedFuture = _repository.loadLinkedElderly(user.uid);
+      _setLinkedFuture(user.uid, _repository.loadLinkedElderly(user.uid));
     });
+  }
+
+  void _setLinkedFuture(
+    String caregiverId,
+    Future<List<LinkedElderly>> linked,
+  ) {
+    _linkedFuture = linked;
+    _emergencyAlerts = watchCaregiverEmergencyAlerts(
+      caregiverId: caregiverId,
+      elderlyIds: linked.then((people) => people.map((person) => person.id)),
+      limitPerElderly: 20,
+    );
   }
 
   Future<void> _refresh() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
-    setState(() => _linkedFuture = _repository.loadLinkedElderly(uid));
+    setState(() => _setLinkedFuture(uid, _repository.loadLinkedElderly(uid)));
     await _linkedFuture;
   }
 
@@ -211,12 +225,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
     final caregiverId = _caregiverId;
     if (caregiverId == null) return const SizedBox.shrink();
     return StreamBuilder<List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
-      stream: watchCaregiverEmergencyAlerts(
-        caregiverId: caregiverId,
-        elderlyIds: (_linkedFuture ?? Future.value(const <LinkedElderly>[]))
-            .then((people) => people.map((person) => person.id)),
-        limitPerElderly: 20,
-      ),
+      stream: _emergencyAlerts,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return const _StatusCard(
@@ -288,6 +297,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
                       '$elderlyName requested help. Contact them or use the saved emergency number below.',
                       style: const TextStyle(height: 1.35),
                     ),
+                    AlertLocationCard(location: alert['location']),
                   ],
                 ),
               ),

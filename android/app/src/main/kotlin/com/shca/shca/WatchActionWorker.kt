@@ -85,26 +85,41 @@ class WatchActionWorker(context: Context, params: WorkerParameters) : Worker(con
                 ack("completed", "Medicine response saved on the phone.")
                 return Result.success()
             }
-            if (payload.optString("source") == "wearable_fall") {
-                FallSmsWorker.enqueue(applicationContext, user.uid, "watch_${user.uid}_$id",
-                    payload.optLong("createdAt"))
-            }
+            val source = payload.optString("source")
+            if (source != "wearable_fall" && source != "wearable_sos") return Result.failure()
+            val alertId = "watch_${user.uid}_$id"
+            val createdAt = payload.optLong("createdAt")
             val elderlyProfile = Tasks.await(db.collection("elderly_profiles").document(user.uid).get(Source.SERVER), 20, TimeUnit.SECONDS)
+            val phone = elderlyProfile.getString("emergencyContact.phone") ?: ""
+            val callRequested = EmergencyContactCall.request(applicationContext, phone, alertId, createdAt)
+            val alert = db.collection("emergency_alerts").document(alertId)
+            // Prefer the watch snapshot if direct delivery already recorded it.
+            // SIM delivery stays independent of saving the online alert below.
+            val previousLocation = try {
+                val saved = Tasks.await(alert.get(Source.SERVER), 5, TimeUnit.SECONDS)
+                (saved.get("location") as? Map<*, *>)?.let { EmergencyLocation.fromJson(JSONObject(it).toString()) }
+            } catch (_: Exception) { null }
+            val location = previousLocation ?: EmergencyLocation.capture(applicationContext, user.uid, "phone")
+            FallSmsWorker.enqueue(applicationContext, user.uid, alertId, createdAt,
+                manualSos = source == "wearable_sos", location = location)
             val links = Tasks.await(db.collection("care_links").whereEqualTo("elderlyId", user.uid).get(Source.SERVER), 20, TimeUnit.SECONDS)
             val caregivers = links.documents.filter { it.getString("status") == "active" }.mapNotNull { it.getString("caregiverId") }.distinct()
-            val phone = elderlyProfile.getString("emergencyContact.phone") ?: ""
-            val alertId = "watch_${user.uid}_$id"
-            val alert = db.collection("emergency_alerts").document(alertId)
             Tasks.await(db.runTransaction { tx ->
-                if (!tx.get(alert).exists()) tx.set(alert, mapOf("elderlyId" to user.uid,
+                val existing = tx.get(alert)
+                if (!existing.exists()) tx.set(alert, mapOf("elderlyId" to user.uid,
                     "elderlyName" to (elderlyProfile.getString("fullName") ?: profile.getString("fullName") ?: "Elderly user"),
-                    "type" to payload.optString("source"), "status" to "active", "activity" to "Watch emergency",
+                    "type" to source, "status" to "active", "activity" to "Watch emergency",
                     "fallProbability" to payload.optDouble("fallProbability"), "sensorSource" to "watch",
                     "emergencyContactPhone" to phone, "recipientCaregiverIds" to caregivers,
-                    "watchEventId" to id, "createdAt" to FieldValue.serverTimestamp()))
+                    "watchEventId" to id, "createdAt" to FieldValue.serverTimestamp()) +
+                    (location?.let { mapOf("location" to it) } ?: emptyMap()))
+                else if (existing.getString("elderlyId") == user.uid &&
+                    existing.get("location") == null && location != null) {
+                    tx.update(alert, "location", location)
+                }
                 null
             }, 25, TimeUnit.SECONDS)
-            if (payload.optString("source") == "wearable_fall") {
+            if (source == "wearable_fall") {
                 val fallRef = db.collection("fall_events").document(alertId)
                 Tasks.await(db.runTransaction { tx ->
                     if (!tx.get(fallRef).exists()) tx.set(fallRef, mapOf("elderlyId" to user.uid,
@@ -114,7 +129,15 @@ class WatchActionWorker(context: Context, params: WorkerParameters) : Worker(con
                     null
                 }, 25, TimeUnit.SECONDS)
             }
-            WatchBridge.showEmergencyNotification(applicationContext, "Watch help request saved. Tap to open SHCA or call the emergency contact.", phone)
+            WatchBridge.showEmergencyNotification(
+                applicationContext,
+                when {
+                    callRequested -> "Watch help request saved. Call requested for your emergency contact."
+                    phone.isBlank() -> "Watch help request saved. No emergency contact number is set."
+                    else -> "Watch help request saved. Automatic call unavailable. Check SHCA’s Phone permission."
+                },
+                if (callRequested) "" else phone,
+            )
             ack("recorded", "Phone saved your SOS. Checking caregiver push delivery…")
             val token = Tasks.await(user.getIdToken(false), 20, TimeUnit.SECONDS).token ?: throw IllegalStateException("No token")
             val connection = URL("https://shca-medication-images.shca-medication-images.workers.dev/v1/emergency-alerts/push").openConnection() as HttpURLConnection

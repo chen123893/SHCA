@@ -1527,7 +1527,7 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
               ),
               const SizedBox(height: 5),
               const Text(
-                'SHCA reads text on this device and suggests editable details. The scan is not saved as the medicine photo.',
+                'SHCA reads English and Malay text on this device and suggests editable details. The scan is not saved as the medicine photo.',
                 style: TextStyle(color: Colors.black54, height: 1.35),
               ),
               const SizedBox(height: 16),
@@ -1570,12 +1570,11 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
         _recognisedText = text;
         _applySuggestionIfEmpty(_nameController, suggestions.name);
         final suggestedDose = suggestions.dose;
-        final suggestedQuantity = medicationQuantityFromText(suggestedDose);
+        final suggestedQuantity = suggestions.quantity;
         if (suggestedQuantity != null) {
           _quantityPerDose = suggestedQuantity.clamp(1, 99);
-        } else {
-          _setStrengthFromText(suggestedDose, onlyIfEmpty: true);
         }
+        _setStrengthFromText(suggestedDose, onlyIfEmpty: true);
         _applySuggestionIfEmpty(
           _instructionController,
           suggestions.instruction,
@@ -1584,19 +1583,12 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
         _visual = suggestions.visual;
         _instructionSource ??= 'Medicine label';
       });
-      if (text.isEmpty) {
-        _showMessage(
-          'No clear text was found. You can still enter the details manually.',
-        );
-      } else if (suggestions.name == null) {
-        _showMessage(
-          'Text was found, but the medicine name was not clear. Enter the name from the label manually.',
-        );
-      } else {
-        _showMessage(
-          'Medicine label detected. Check every field before saving.',
-        );
-      }
+      final message = text.isEmpty
+          ? 'No clear text was found. You can still enter the details manually.'
+          : suggestions.name == null
+          ? 'Text was found, but the medicine name was not clear. Enter the name from the label manually.'
+          : 'Medicine label detected. Check every field before saving.';
+      _showMessage([message, ...suggestions.reviewNotes].join('\n'));
     } catch (_) {
       if (mounted) {
         _showMessage(
@@ -2239,7 +2231,8 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
                               validator: _required,
                               textInputAction: TextInputAction.next,
                               decoration: const InputDecoration(
-                                labelText: 'Instruction, e.g. After meal',
+                                labelText: 'Instructions (English or Malay)',
+                                helperText: 'e.g. Selepas makan / After meal',
                               ),
                             ),
                             const SizedBox(height: 12),
@@ -2783,23 +2776,29 @@ class _ScheduleCard extends StatelessWidget {
                         ),
                       ],
                     ),
-                    if (schedule.isLowStock) ...[
+                    if (schedule.stockRemaining != null) ...[
                       const SizedBox(height: 5),
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(
-                            Icons.warning_amber_rounded,
-                            size: 16,
-                            color: Color(0xFFFF9800),
-                          ),
-                          const SizedBox(width: 3),
+                          if (schedule.isLowStock) ...[
+                            const Icon(
+                              Icons.warning_amber_rounded,
+                              size: 16,
+                              color: Color(0xFFFF9800),
+                            ),
+                            const SizedBox(width: 3),
+                          ],
                           Text(
                             '${schedule.stockRemaining} left',
-                            style: const TextStyle(
-                              color: Color(0xFFE87800),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
+                            style: TextStyle(
+                              color: schedule.isLowStock
+                                  ? const Color(0xFFE87800)
+                                  : Colors.black54,
+                              fontSize: schedule.isLowStock ? 12 : 11,
+                              fontWeight: schedule.isLowStock
+                                  ? FontWeight.w800
+                                  : FontWeight.w600,
                             ),
                           ),
                         ],

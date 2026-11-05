@@ -67,6 +67,8 @@ object DirectEmergencySender {
         "https://shca-medication-images.shca-medication-images.workers.dev/v1/watch-emergency"
     private const val PREFS = "shca_watch_direct_emergency_v1"
 
+    private val sending = mutableSetOf<String>()
+
     fun clearPending(context: Context) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
     }
@@ -107,6 +109,7 @@ object DirectEmergencySender {
     }
 
     private fun sendPending(appContext: Context, eventId: String, payload: JSONObject) {
+        synchronized(this) { if (!sending.add(eventId)) return }
         Thread {
             try {
                 val identity = WatchDeviceIdentity.getOrCreate(appContext)
@@ -115,13 +118,29 @@ object DirectEmergencySender {
                 val probability = payload.optDouble("fallProbability", 0.0)
                     .coerceIn(0.0, 1.0)
                 val probabilityPpm = kotlin.math.round(probability * 1_000_000).toLong()
+                val uid = WatchSession.userId(appContext)
+                if (payload.optString("elderlyId") != uid) return@Thread
+                val location = if (!EmergencyLocation.isEnabled(appContext, uid)) null
+                    else if (payload.optBoolean("locationChecked")) EmergencyLocation.fromJson(payload.optString("locationJson"))
+                    else EmergencyLocation.capture(appContext, uid, "watch")
+                val locationJson = location?.let { JSONObject(it).toString() }
+                if (WatchSession.userId(appContext) != uid) return@Thread
+                synchronized(this) {
+                    val preferences = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    val pending = JSONObject(preferences.getString("pending", "{}"))
+                    if (!pending.has(eventId)) return@Thread
+                    payload.put("locationChecked", true)
+                    if (locationJson != null) payload.put("locationJson", locationJson) else payload.remove("locationJson")
+                    pending.put(eventId, payload)
+                    preferences.edit().putString("pending", pending.toString()).commit()
+                }
                 val canonical = listOf(
                     identity.keyId,
                     eventId,
                     createdAt.toString(),
                     source,
                     probabilityPpm.toString(),
-                ).joinToString("\n")
+                ).joinToString("\n") + (locationJson?.let { "\n$it" } ?: "")
                 val body = JSONObject(
                     mapOf(
                         "credentialId" to identity.keyId,
@@ -132,6 +151,7 @@ object DirectEmergencySender {
                         "signature" to WatchDeviceIdentity.sign(appContext, canonical),
                     ),
                 )
+                if (locationJson != null) body.put("locationJson", locationJson)
                 val connection = URL(ENDPOINT).openConnection() as HttpURLConnection
                 connection.requestMethod = "POST"
                 connection.connectTimeout = 12_000
@@ -179,6 +199,8 @@ object DirectEmergencySender {
                     "queued",
                     "Direct delivery is unavailable. The paired-phone fallback is still trying…",
                 )
+            } finally {
+                synchronized(this) { sending.remove(eventId) }
             }
         }.start()
     }

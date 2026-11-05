@@ -74,6 +74,49 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
       _signInMessage = '';
   String _medicineEventId = '', _lastPublishedLabel = '';
   String _fallPermissionMessage = '';
+  static const _locationChannel = MethodChannel(
+    'com.shca.shca/emergency_location',
+  );
+  bool _locationEnabled = false,
+      _locationBackgroundAllowed = false,
+      _locationBusy = false;
+
+  Future<void> _loadLocation() async {
+    try {
+      final status = await _locationChannel.invokeMapMethod<String, dynamic>(
+        'status',
+      );
+      if (mounted) {
+        setState(() {
+          _locationEnabled = status?['enabled'] == true;
+          _locationBackgroundAllowed = status?['backgroundAllowed'] == true;
+        });
+      }
+    } on PlatformException {
+      // Keep the previous state if the platform channel is temporarily busy.
+    } on MissingPluginException {
+      // Preview/test environments have no native location channel.
+    }
+  }
+
+  Future<void> _toggleLocation() async {
+    setState(() => _locationBusy = true);
+    try {
+      await _locationChannel.invokeMethod<Object?>('setEnabled', {
+        'enabled': !_locationEnabled,
+      });
+      await _loadLocation();
+    } on PlatformException {
+      if (mounted) {
+        setState(
+          () => _fallPermissionMessage = 'Could not change location sharing.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _locationBusy = false);
+    }
+  }
+
   DateTime? _createdAt, _lastPublishedAt;
   String _newId() =>
       '${DateTime.now().millisecondsSinceEpoch}-${_random.nextInt(1 << 32)}';
@@ -96,6 +139,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     try {
       final value = await _bridge.initialize();
       _applyState(value);
+      unawaited(_loadLocation());
       await _syncMotion();
     } catch (_) {
       // Keep the sign-in page available even when the first network check fails.
@@ -120,6 +164,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
   }
 
   Future<void> _resumeServices() async {
+    unawaited(_loadLocation());
     await _syncMotion();
     await _refresh();
   }
@@ -1184,6 +1229,38 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
           ),
       ]);
   Widget _activity() => _scroll('Activity', [
+    OutlinedButton.icon(
+      key: const Key('watch-location-toggle'),
+      onPressed: widget.enableServices && !_locationBusy
+          ? _toggleLocation
+          : null,
+      icon: const Icon(Icons.location_on_outlined, size: 18),
+      label: Text(
+        _locationBusy
+            ? 'Please wait…'
+            : _locationEnabled
+            ? 'Turn off alert location'
+            : 'Share alert location',
+        textAlign: TextAlign.center,
+      ),
+    ),
+    const Text(
+      'Include this watch’s location in linked caregiver alerts.',
+      textAlign: TextAlign.center,
+      style: TextStyle(fontSize: 11),
+    ),
+    if (_locationEnabled && !_locationBackgroundAllowed) ...[
+      const Text(
+        'For screen-off alerts, choose Permissions → Location → Allow all the time.',
+        textAlign: TextAlign.center,
+        style: TextStyle(fontSize: 11),
+      ),
+      TextButton(
+        onPressed: () => _locationChannel.invokeMethod<void>('openSettings'),
+        child: const Text('Location settings'),
+      ),
+    ],
+    const SizedBox(height: 8),
     OutlinedButton.icon(
       key: const Key('watch-fall-detection-toggle'),
       onPressed: widget.enableServices && !_monitoringBusy
