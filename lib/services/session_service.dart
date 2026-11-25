@@ -26,6 +26,7 @@ class AppSessionService {
   final SessionTask _unregisterCaregiver;
   final Duration cleanupTimeout;
 
+  // Stop monitoring and clear this account's notifications before signing out.
   Future<void> signOut({required bool caregiver}) async {
     await Future.wait<void>([
       _bestEffort(_clearMedicationAlarms),
@@ -35,6 +36,7 @@ class AppSessionService {
     await _signOut();
   }
 
+  // Limit cleanup time so a failed cleanup cannot trap the user in the account.
   Future<void> _bestEffort(SessionTask task) async {
     try {
       await task().timeout(cleanupTimeout);

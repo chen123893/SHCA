@@ -43,6 +43,7 @@ DEFAULT_OUTPUT_ROOT = PROJECT_ROOT / "saved_model" / "deployment"
 DEFAULT_CACHE_ROOT = PROJECT_ROOT / "data" / "processed"
 
 
+# Set the random seeds so repeated training runs are easier to compare.
 def set_determinism(seed: int) -> None:
     os.environ.setdefault("TF_DETERMINISTIC_OPS", "1")
     random.seed(seed)
@@ -54,6 +55,7 @@ def set_determinism(seed: int) -> None:
         pass
 
 
+# Save the prepared windows so the raw recordings do not need rereading.
 def save_dataset_cache(data: WindowedDataset, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
@@ -67,6 +69,7 @@ def save_dataset_cache(data: WindowedDataset, path: Path) -> None:
     )
 
 
+# Load the previously prepared dataset when its cache is available.
 def load_dataset_cache(path: Path, audit_path: Path) -> WindowedDataset:
     with np.load(path, allow_pickle=False) as arrays:
         return WindowedDataset(
@@ -80,6 +83,7 @@ def load_dataset_cache(path: Path, audit_path: Path) -> WindowedDataset:
         )
 
 
+# Use the cached dataset or prepare it from the raw sensor files.
 def get_dataset(dataset: str, cache_root: Path, rebuild_cache: bool) -> WindowedDataset:
     cache_path = cache_root / f"{dataset}_windows_50hz_128_v3.npz"
     audit_path = cache_root / f"{dataset}_audit.json"
@@ -95,6 +99,7 @@ def get_dataset(dataset: str, cache_root: Path, rebuild_cache: bool) -> Windowed
     return data
 
 
+# Calculate feature means and scales using the training windows only.
 def fit_scaler(x_train: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     flat = x_train.reshape(-1, x_train.shape[-1]).astype(np.float64)
     mean = flat.mean(axis=0)
@@ -103,10 +108,12 @@ def fit_scaler(x_train: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return mean.astype(np.float32), scale.astype(np.float32)
 
 
+# Apply the training-set scaling values to each sensor window.
 def scale_windows(x: np.ndarray, mean: np.ndarray, scale: np.ndarray) -> np.ndarray:
     return ((x - mean) / scale).astype(np.float32)
 
 
+# Create the shared sensor network with activity and fall output heads.
 def build_model(class_count: int) -> tf.keras.Model:
     sensor_window = tf.keras.layers.Input(
         shape=(WINDOW_SIZE, len(FEATURE_NAMES)), name="sensor_window", dtype=tf.float32
@@ -141,11 +148,13 @@ def build_model(class_count: int) -> tf.keras.Model:
     return tf.keras.Model(sensor_window, {"activity": activity, "fall": fall}, name="activity_fall_cnn")
 
 
+# Convert activity names into the numeric labels expected by the model.
 def label_ids(labels: np.ndarray, labels_ordered: list[str]) -> np.ndarray:
     lookup = {label: index for index, label in enumerate(labels_ordered)}
     return np.asarray([lookup[str(label)] for label in labels], dtype=np.int32)
 
 
+# Give the training samples weights based on their class balance.
 def sample_weights(y_activity: np.ndarray, fall_index: int) -> dict[str, np.ndarray]:
     classes = np.unique(y_activity)
     balanced = compute_class_weight(class_weight="balanced", classes=classes, y=y_activity)
@@ -164,6 +173,7 @@ def sample_weights(y_activity: np.ndarray, fall_index: int) -> dict[str, np.ndar
     return {"activity": activity_weights, "fall": fall_weights}
 
 
+# Set the optimiser, losses and metrics for both prediction heads.
 def compile_model(model: tf.keras.Model) -> None:
     model.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
@@ -183,6 +193,7 @@ def compile_model(model: tf.keras.Model) -> None:
     )
 
 
+# Read the activity and fall outputs regardless of their returned container format.
 def unpack_predictions(predictions: dict | list, class_count: int) -> tuple[np.ndarray, np.ndarray]:
     if isinstance(predictions, dict):
         return np.asarray(predictions["activity"]), np.asarray(predictions["fall"]).reshape(-1)
@@ -192,6 +203,7 @@ def unpack_predictions(predictions: dict | list, class_count: int) -> tuple[np.n
     return activity, fall.reshape(-1)
 
 
+# Choose the fall probability threshold using validation results.
 def choose_fall_threshold(y_true: np.ndarray, probabilities: np.ndarray) -> dict[str, float]:
     precision, recall, thresholds = precision_recall_curve(y_true, probabilities)
     if len(thresholds) == 0:
@@ -216,6 +228,7 @@ def choose_fall_threshold(y_true: np.ndarray, probabilities: np.ndarray) -> dict
     }
 
 
+# Apply rolling-window votes and cooldowns to the recorded predictions.
 def simulate_alert_policy(
     y_fall: np.ndarray,
     fall_probabilities: np.ndarray,
@@ -278,6 +291,7 @@ def simulate_alert_policy(
     }
 
 
+# Compare validation alert policies before selecting the exported settings.
 def choose_alert_threshold(
     y_fall: np.ndarray,
     fall_probabilities: np.ndarray,
@@ -305,6 +319,7 @@ def choose_alert_threshold(
     return float(best["threshold"]), best
 
 
+# Combine the activity and fall outputs into the reported class prediction.
 def combined_predictions(
     activity_probabilities: np.ndarray,
     fall_probabilities: np.ndarray,
@@ -318,6 +333,7 @@ def combined_predictions(
     return predicted.astype(np.int32)
 
 
+# Calculate the model metrics for the supplied split.
 def evaluate(
     y_activity: np.ndarray,
     activity_probabilities: np.ndarray,
@@ -350,6 +366,7 @@ def evaluate(
     return metrics, matrix
 
 
+# Save a labelled confusion-matrix figure for the evaluation results.
 def save_confusion_matrix(matrix: np.ndarray, labels: list[str], path: Path) -> None:
     size = max(8, int(len(labels) * 0.75))
     fig, ax = plt.subplots(figsize=(size, size))
@@ -382,6 +399,7 @@ def save_confusion_matrix(matrix: np.ndarray, labels: list[str], path: Path) -> 
     plt.close(fig)
 
 
+# Convert the trained model into the TFLite file used by the app.
 def export_tflite(model: tf.keras.Model, path: Path) -> bytes:
     converter = tf.lite.TFLiteConverter.from_keras_model(model)
     converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS]
@@ -390,6 +408,7 @@ def export_tflite(model: tf.keras.Model, path: Path) -> bytes:
     return flatbuffer
 
 
+# Check that the exported TFLite model produces usable predictions.
 def verify_tflite(
     model: tf.keras.Model,
     tflite_path: Path,
@@ -424,6 +443,7 @@ def verify_tflite(
     }
 
 
+# Train, evaluate and export one target's model and supporting files.
 def train_one(
     dataset: str,
     data: WindowedDataset,
@@ -591,6 +611,7 @@ def train_one(
     return result
 
 
+# Read the dataset, training and export options from the command line.
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train phone and wearable activity/fall models.")
     parser.add_argument("--dataset", choices=["phone", "wearable", "both"], default="both")
@@ -604,6 +625,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+# Set up the training run and process the requested model targets.
 def main() -> None:
     args = parse_args()
     requested = ["phone", "wearable"] if args.dataset == "both" else [args.dataset]

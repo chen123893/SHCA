@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 class EmergencyLocationService {
   static const channel = MethodChannel('com.shca.shca/emergency_location');
 
+  // Ask the device for an emergency location when sharing is enabled.
   static Future<Map<String, dynamic>?> capture() async {
     try {
       return await channel.invokeMapMethod<String, dynamic>('capture');
@@ -32,6 +33,7 @@ class AlertLocation {
   final String source;
   final bool lastKnown;
 
+  // Read a saved location only when its coordinates and timestamp are valid.
   static AlertLocation? parse(Object? value) {
     if (value is! Map) return null;
     final lat = value['latitude'];
@@ -69,6 +71,7 @@ class AlertLocation {
     );
   }
 
+  // Build the Maps link from the saved coordinates.
   Uri get mapsUri => Uri.https('www.google.com', '/maps/search/', {
     'api': '1',
     'query': '$latitude,$longitude',

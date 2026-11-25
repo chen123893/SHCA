@@ -31,6 +31,7 @@ object FallAlertFeedback {
         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
         .build()
 
+    // Start the phone fall-warning sound, vibration and screen wake-up support.
     @Suppress("DEPRECATION")
     fun start(context: Context, durationMillis: Long) {
         if (active) return
@@ -106,6 +107,7 @@ object FallAlertFeedback {
         }
     }
 
+    // Stop the fall-warning feedback and release its wake lock.
     fun stop() {
         if (!active) return
         active = false

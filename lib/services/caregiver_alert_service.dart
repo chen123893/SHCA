@@ -17,6 +17,7 @@ watchCaregiverEmergencyAlerts({
   final linked = _resolveAlertAccounts(elderlyIds);
   return Stream.multi((controller) {
     var cancelled = false;
+    // Start one alert listener for each linked account.
     Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>> load() async* {
       final result = await linked;
       if (cancelled) return;
@@ -57,6 +58,7 @@ watchCaregiverEmergencyAlerts({
   });
 }
 
+// Read the linked account IDs and keep any loading error to report later.
 Future<({Set<String> ids, Object? error, StackTrace? stackTrace})>
 _resolveAlertAccounts(Future<Iterable<String>> elderlyIds) async {
   try {

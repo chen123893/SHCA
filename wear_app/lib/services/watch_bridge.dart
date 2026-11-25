@@ -15,7 +15,9 @@ class WatchMedication {
     this.remindAt,
     this.status = 'pending',
   });
+  // Read the dose details received from the native watch layer.
   factory WatchMedication.fromMap(Map<dynamic, dynamic>? map) {
+    // Convert a saved millisecond timestamp into a watch reminder time.
     DateTime? time(String key) {
       final value = (map?[key] as num?)?.toInt() ?? 0;
       return value > 0 ? DateTime.fromMillisecondsSinceEpoch(value) : null;
@@ -34,13 +36,16 @@ class WatchMedication {
   }
   final String id, occurrenceId, name, dose, instruction, status;
   final DateTime? scheduledAt, remindAt;
+  // Check that the medicine has both a schedule ID and a dose ID.
   bool get isAvailable => id.isNotEmpty && occurrenceId.isNotEmpty;
+  // Keep only doses scheduled for the watch's current day.
   bool isToday(DateTime now) =>
       scheduledAt?.year == now.year &&
       scheduledAt?.month == now.month &&
       scheduledAt?.day == now.day;
 }
 
+// Get today's unfinished future reminders in time order.
 List<WatchMedication> upcomingToday(
   Iterable<WatchMedication> values,
   DateTime now,
@@ -73,6 +78,7 @@ class WatchInitialState {
     this.launchEvent,
     this.emergencyAck,
   });
+  // Read the watch account, permission and medicine state from Android.
   factory WatchInitialState.fromMap(Map<dynamic, dynamic>? map) =>
       WatchInitialState(
         connected: map?['connected'] == true,
@@ -109,7 +115,9 @@ class WatchBridge {
   static const _events = EventChannel('com.shca.shca/watch_events');
   StreamSubscription<dynamic>? _subscription;
   final _controller = StreamController<Map<String, dynamic>>.broadcast();
+  // Expose watch events through one shared stream.
   Stream<Map<String, dynamic>> get events => _controller.stream;
+  // Subscribe to native events once, then read the current watch state.
   Future<WatchInitialState> initialize() async {
     _subscription ??= _events.receiveBroadcastStream().listen(
       (dynamic event) {
@@ -121,14 +129,17 @@ class WatchBridge {
     return refresh();
   }
 
+  // Save the watch's fall-monitoring switch through Android.
   Future<void> setMonitoringEnabled(bool enabled) =>
       _methods.invokeMethod<void>('setMonitoringEnabled', {'enabled': enabled});
 
+  // Read the latest watch state with a timeout if Android does not answer.
   Future<WatchInitialState> refresh() async => WatchInitialState.fromMap(
     await _methods
         .invokeMapMethod<dynamic, dynamic>('getInitialState')
         .timeout(const Duration(seconds: 8)),
   );
+  // Send the entered watch credentials to the native sign-in flow.
   Future<Map<String, dynamic>> signIn({
     required String email,
     required String password,
@@ -138,13 +149,16 @@ class WatchBridge {
             .timeout(const Duration(seconds: 35)) ??
         {},
   );
+  // Start or renew a request to sign in using the paired phone.
   Future<Map<String, dynamic>> startPhoneSignIn({bool renew = false}) async =>
       Map<String, dynamic>.from(
         await _methods.invokeMapMethod('startPhoneSignIn', {'renew': renew}) ??
             {},
       );
+  // Cancel the current phone-assisted sign-in request.
   Future<void> cancelPhoneSignIn() =>
       _methods.invokeMethod<void>('cancelPhoneSignIn');
+  // Open the native watch editor for an email or password field.
   Future<String?> editCredential({
     required String field,
     required String value,
@@ -152,7 +166,9 @@ class WatchBridge {
     'field': field,
     'value': value,
   });
+  // Ask Android to clear the watch's current session.
   Future<void> signOut() => _methods.invokeMethod<void>('signOut');
+  // Send the latest watch activity result to the native bridge.
   Future<bool> publishStatus({
     required String label,
     required double confidence,
@@ -174,6 +190,7 @@ class WatchBridge {
     }
   }
 
+  // Pass the emergency event to the watch's native delivery flow.
   Future<Map<String, dynamic>> sendEmergency({
     required String eventId,
     required DateTime createdAt,
@@ -190,6 +207,7 @@ class WatchBridge {
             .timeout(const Duration(seconds: 10)) ??
         {},
   );
+  // Send the dose response using its original occurrence ID.
   Future<void> medicationAction({
     required WatchMedication medication,
     required String action,
@@ -205,22 +223,30 @@ class WatchBridge {
         .timeout(const Duration(seconds: 10));
   }
 
+  // Ask the native fall countdown to confirm the detected event.
   Future<bool> confirmPossibleFall(double probability) async =>
       await _methods.invokeMethod<bool>('confirmPossibleFall', {
         'probability': probability,
       }) ??
       false;
+  // Open the setting needed to display a fall warning over other screens.
   Future<void> requestFallScreenPermission() =>
       _methods.invokeMethod<void>('requestFallScreenPermission');
 
+  // Start the watch's fall warning vibration.
   Future<void> startFallVibration() =>
       _methods.invokeMethod<void>('startFallVibration');
+  // Stop the watch's current warning vibration.
   Future<void> stopVibration() => _methods.invokeMethod<void>('stopVibration');
+  // Run a short vibration test on the watch.
   Future<void> testVibration() => _methods.invokeMethod<void>('testVibration');
+  // Open the watch setting for exact medicine alarms.
   Future<void> requestAlarmPermission() =>
       _methods.invokeMethod<void>('requestAlarmPermission');
+  // Ask for permission to show watch notifications.
   Future<void> requestNotifications() =>
       _methods.invokeMethod<void>('requestNotifications');
+  // Cancel the native event subscription and close the shared event stream.
   Future<void> dispose() async {
     await _subscription?.cancel();
     await _controller.close();

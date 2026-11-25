@@ -31,6 +31,7 @@ import kotlin.math.ceil
 import kotlin.math.min
 
 data class PhoneFallAlarmState(val eventId: String, val deadline: Long, val preview: Boolean = false) {
+    // Calculate the remaining warning time from the saved deadline.
     fun secondsLeft(now: Long = System.currentTimeMillis()): Int =
         ceil((deadline - now).coerceAtLeast(0) / 1000.0).toInt()
 }
@@ -47,16 +48,20 @@ object PhoneFallAlarm {
     private var previewDeadline: Runnable? = null
     private var responding = false
 
+    // Read the preview warning or the phone service's pending fall warning.
     fun current(context: Context): PhoneFallAlarmState? = previewState
         ?: PhoneMonitoringService.currentFallAlarm(context)
 
+    // Check whether a native phone fall warning is already displayed.
     fun isShowing(): Boolean = activeId != null
 
+    // Build the intent that opens the phone fall-warning screen.
     fun activityIntent(context: Context, state: PhoneFallAlarmState): Intent =
         Intent(context, PhoneFallAlarmActivity::class.java)
             .putExtra("eventId", state.eventId)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
 
+    // Prepare the warning-screen intent for an Android notification.
     fun activityPendingIntent(context: Context, state: PhoneFallAlarmState): PendingIntent {
         val options = if (Build.VERSION.SDK_INT >= 34) ActivityOptions.makeBasic().apply {
             setPendingIntentCreatorBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
@@ -65,6 +70,7 @@ object PhoneFallAlarm {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE, options)
     }
 
+    // Show the current fall warning and keep its screen awake.
     fun present(context: Context, state: PhoneFallAlarmState) {
         val app = context.applicationContext
         if (current(app)?.eventId != state.eventId || state.secondsLeft() <= 0) return
@@ -91,12 +97,14 @@ object PhoneFallAlarm {
         }
     }
 
+    // Try to bring the native fall-warning activity to the front.
     private fun launchActivity(context: Context, state: PhoneFallAlarmState) {
         if (activeId != state.eventId || current(context)?.eventId != state.eventId) return
         try { context.startActivity(activityIntent(context, state)) }
         catch (error: Exception) { android.util.Log.w("PhoneFallAlarm", "Alarm activity could not open; overlay/notification remain", error) }
     }
 
+    // Show the fall warning above other apps when overlay permission is available.
     private fun showOverlay(context: Context, state: PhoneFallAlarmState) {
         val manager = context.getSystemService(WindowManager::class.java)
         val themed = android.view.ContextThemeWrapper(context, android.R.style.Theme_Material_Light_NoActionBar)
@@ -116,15 +124,18 @@ object PhoneFallAlarm {
         }
     }
 
+    // Update the overlay when the dedicated warning activity becomes visible.
     fun activityVisible(eventId: String) {
         if (activeId == eventId) removeOverlay()
     }
 
+    // Remove the fall-warning overlay and release its window reference.
     private fun removeOverlay() {
         overlay?.let { try { overlayManager?.removeView(it) } catch (_: Exception) { } }
         overlay = null; overlayManager = null
     }
 
+    // Close the warning display and release the active screen lock.
     fun dismiss() {
         activeId = null
         responding = false
@@ -133,6 +144,7 @@ object PhoneFallAlarm {
         listeners.toList().forEach { it() }
     }
 
+    // Send the safe or help response to the phone monitoring service.
     fun respond(context: Context, eventId: String, send: Boolean) {
         if (responding || current(context)?.eventId != eventId) return
         responding = true
@@ -142,13 +154,19 @@ object PhoneFallAlarm {
         }
         PhoneMonitoringService.respond(context, mapOf("eventId" to eventId, "send" to send),
             object : io.flutter.plugin.common.MethodChannel.Result {
+                // Allow another response after the service call completes.
                 override fun success(result: Any?) { responding = false }
+                // Clear the response-in-progress flag if the service call fails.
                 override fun error(code: String, message: String?, details: Any?) { responding = false }
+                // Clear the response-in-progress flag if the service handler is
+                // unavailable.
                 override fun notImplemented() { responding = false }
             })
     }
 
+    // Register a callback for changes to the displayed fall warning.
     fun listen(listener: () -> Unit) { listeners.add(listener) }
+    // Remove the callback when its warning view is no longer used.
     fun unlisten(listener: () -> Unit) { listeners.remove(listener) }
 
     /** Debug-only local preview: no service, cloud record, or caregiver message. */
@@ -165,6 +183,7 @@ object PhoneFallAlarm {
         present(context, state)
     }
 
+    // End the local warning preview and record its displayed result.
     private fun finishPreview(response: String) {
         previewDeadline?.let { handler.removeCallbacks(it) }; previewDeadline = null
         previewState = null
@@ -182,6 +201,7 @@ class PhoneFallAlarmView(context: Context, private val eventId: String) : Scroll
     private val countdownStatus = TextView(context)
     private var lastSeconds = -1
     private val tick = object : Runnable {
+        // Refresh the countdown text while the native warning view is attached.
         override fun run() {
             val state = PhoneFallAlarm.current(context)
             if (state?.eventId != eventId) return
@@ -221,6 +241,7 @@ class PhoneFallAlarmView(context: Context, private val eventId: String) : Scroll
         val circle = object : FrameLayout(context) {
             private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
             init { setWillNotDraw(false) }
+            // Size the native warning view within the available display space.
             override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
                 val comfortableHeight = (resources.displayMetrics.heightPixels * .26).toInt()
                     .coerceIn(dp(160), dp(260))
@@ -228,6 +249,7 @@ class PhoneFallAlarmView(context: Context, private val eventId: String) : Scroll
                 super.onMeasure(View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.EXACTLY),
                     View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.EXACTLY))
             }
+            // Draw the countdown display using its current warning state.
             override fun onDraw(canvas: Canvas) {
                 super.onDraw(canvas)
                 val radius = min(width, height) / 2f - dp(2)
@@ -248,6 +270,7 @@ class PhoneFallAlarmView(context: Context, private val eventId: String) : Scroll
         card.addView(circle, LinearLayout.LayoutParams(-1, -2).apply { gravity = Gravity.CENTER_HORIZONTAL })
         explanation.apply { textSize = 16f; gravity = Gravity.CENTER; setTextColor(0xff302722.toInt()); setTypeface(null, Typeface.BOLD) }
         card.addView(explanation, row(top = 22, bottom = 12))
+        // Create one of the native warning response buttons.
         fun button(title: String, color: Int, send: Boolean) {
             card.addView(Button(context).apply {
                 text = title; isAllCaps = false; textSize = 18f; minHeight = dp(58)
@@ -273,19 +296,26 @@ class PhoneFallAlarmView(context: Context, private val eventId: String) : Scroll
         content.addView(statuses, row())
     }
 
+    // Convert layout sizes from dp into screen pixels.
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+    // Arrange native warning content in a horizontal row.
     private fun row(top: Int = 0, bottom: Int = 0) = LinearLayout.LayoutParams(-1, -2).apply {
         topMargin = dp(top); bottomMargin = dp(bottom)
     }
+    // Create the rounded background used by the warning view.
     private fun rounded(color: Int, radius: Float) = GradientDrawable().apply {
         setColor(color); cornerRadius = radius * resources.displayMetrics.density
     }
+    // Create a text label for the native fall-warning screen.
     private fun label(value: String, size: Float, color: Int, bold: Boolean = false) = TextView(context).apply {
         text = value; textSize = size; gravity = Gravity.CENTER; setTextColor(color)
         if (bold) setTypeface(null, Typeface.BOLD)
     }
+    // Start countdown updates when the warning view is attached.
     override fun onAttachedToWindow() { super.onAttachedToWindow(); handler.post(tick) }
+    // Remove countdown callbacks when the warning view is detached.
     override fun onDetachedFromWindow() { handler.removeCallbacks(tick); super.onDetachedFromWindow() }
+    // Consume Back so it cannot silently dismiss the pending warning.
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean =
         if (keyCode == KeyEvent.KEYCODE_BACK) true else super.onKeyDown(keyCode, event)
 }
@@ -295,6 +325,7 @@ class PhoneFallAlarmActivity : Activity() {
     private val changed: () -> Unit = {
         if (PhoneFallAlarm.current(this)?.eventId != eventId || !PhoneFallAlarm.isShowing()) finish()
     }
+    // Create the native fall-warning activity and apply its screen settings.
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= 27) { setShowWhenLocked(true); setTurnScreenOn(true) }
@@ -305,7 +336,9 @@ class PhoneFallAlarmActivity : Activity() {
         PhoneFallAlarm.listen(changed)
         bindAlarm()
     }
+    // Bind a new pending warning to the existing native activity.
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); bindAlarm() }
+    // Display the current service warning or close a stale warning screen.
     private fun bindAlarm() {
         eventId = intent.getStringExtra("eventId") ?: ""
         if (eventId.isEmpty() || PhoneFallAlarm.current(this)?.eventId != eventId) { finish(); return }
@@ -322,8 +355,11 @@ class PhoneFallAlarmActivity : Activity() {
             }
         }
     }
+    // Refresh the warning when its native activity returns to the foreground.
     override fun onResume() { super.onResume(); PhoneFallAlarm.activityVisible(eventId); changed() }
+    // Keep the warning open until the user chooses a response.
     @Deprecated("Use the explicit cancel or send response")
     override fun onBackPressed() { }
+    // Remove the warning activity's listener when the activity is destroyed.
     override fun onDestroy() { PhoneFallAlarm.unlisten(changed); super.onDestroy() }
 }

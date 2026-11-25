@@ -3,6 +3,7 @@ package com.shca.shca
 import java.security.MessageDigest
 
 object WatchIdentityScope {
+    // Build an account-specific key alias for the watch signing identity.
     fun aliasFor(userId: String): String {
         val legacy = "shca_watch_emergency_rsa_v1"
         if (userId.isBlank()) return legacy

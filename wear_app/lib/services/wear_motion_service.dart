@@ -47,6 +47,7 @@ class WristImpactEvidence {
   final double peakJerk;
   final double peakAngularSpeed;
 
+  // Require all configured wrist-impact checks to pass together.
   bool passes({
     required double minimumPeakAcceleration,
     required double minimumAccelerationRange,
@@ -59,6 +60,7 @@ class WristImpactEvidence {
       peakAngularSpeed >= minimumPeakAngularSpeed;
 }
 
+// Measure acceleration, angular speed and jerk in the same wrist sensor window.
 @visibleForTesting
 WristImpactEvidence evaluateWristImpact({
   required List<double> accelerationMagnitudes,
@@ -150,13 +152,16 @@ class WearMotionService extends ChangeNotifier {
   bool _disposed = false;
   MotionSnapshot _snapshot = const MotionSnapshot();
 
+  // Read the latest watch activity and fall result.
   MotionSnapshot get snapshot => _snapshot;
 
+  // Queue monitoring startup so it cannot overlap a stop request.
   Future<void> start() {
     _operations = _operations.then((_) => _start());
     return _operations;
   }
 
+  // Load the wrist model and start collecting both motion sensors.
   Future<void> _start() async {
     if (_started) return;
     _started = true;
@@ -204,6 +209,7 @@ class WearMotionService extends ChangeNotifier {
     }
   }
 
+  // Load the model, labels, scaling values and detection settings.
   Future<void> _loadModelContract() async {
     final scaler = jsonDecode(
       await rootBundle.loadString(_scalerAsset),
@@ -277,6 +283,7 @@ class WearMotionService extends ChangeNotifier {
     }
   }
 
+  // Reject stale readings and build a regularly sampled wrist window.
   void _sampleOnGrid() {
     if (!_started) return;
     final now = DateTime.now();
@@ -346,6 +353,7 @@ class WearMotionService extends ChangeNotifier {
     }
   }
 
+  // Run the sensor window through the model and check its outputs.
   void _runInference() {
     final interpreter = _interpreter;
     if (interpreter == null) return;
@@ -453,6 +461,7 @@ class WearMotionService extends ChangeNotifier {
     }
   }
 
+  // Use a simple movement label only when activity confidence is high enough.
   String _displayLabel(String label, double confidence) {
     if (confidence < _minimumActivityConfidence) return 'Checking movement';
     return switch (label) {
@@ -467,6 +476,7 @@ class WearMotionService extends ChangeNotifier {
     };
   }
 
+  // Clear the warning votes and start a cooldown after safety is confirmed.
   void acknowledgePossibleFall() {
     _fallVotes.clear();
     _lastPossibleFall = DateTime.now();
@@ -485,6 +495,7 @@ class WearMotionService extends ChangeNotifier {
     );
   }
 
+  // Show that monitoring is unavailable if a sensor fails.
   void _handleSensorError(Object error, StackTrace stackTrace) {
     debugPrint('Watch sensor error: $error\n$stackTrace');
     _setSnapshot(
@@ -496,6 +507,7 @@ class WearMotionService extends ChangeNotifier {
     );
   }
 
+  // Discard the old sensor window and fall votes after a sampling gap.
   void _resetSamplingWindow() {
     _window.clear();
     _rawWindow.clear();
@@ -507,16 +519,19 @@ class WearMotionService extends ChangeNotifier {
     _lastSampleAt = null;
   }
 
+  // Save the latest monitoring result and update its listeners.
   void _setSnapshot(MotionSnapshot snapshot) {
     _snapshot = snapshot;
     if (!_disposed) notifyListeners();
   }
 
+  // Queue monitoring shutdown after any pending startup work.
   Future<void> stop() {
     _operations = _operations.then((_) => _stop());
     return _operations;
   }
 
+  // Stop sampling and release the model and sensor listeners.
   Future<void> _stop() async {
     _started = false;
     _sampleTimer?.cancel();
@@ -546,6 +561,7 @@ class WearMotionService extends ChangeNotifier {
     );
   }
 
+  // Mark the monitor as disposed and stop its sensors and model.
   @override
   void dispose() {
     _disposed = true;

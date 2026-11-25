@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shca/models/health_statistics.dart';
@@ -92,6 +94,7 @@ void main() {
       ),
     );
     expect(find.text('Your history starts here'), findsOneWidget);
+    expect(find.text('Next 7 days · completion outlook'), findsNothing);
     expect(find.text('Smart Insights'), findsOneWidget);
     expect(find.textContaining('On-device rules'), findsOneWidget);
     expect(find.text('—'), findsOneWidget);
@@ -113,33 +116,53 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('AI forecast explains its prediction and limitations', (
+  testWidgets('local outlook is replaced after an AI retry succeeds', (
     tester,
   ) async {
+    final first = Completer<AiStatisticsForecast>();
+    final retry = Completer<AiStatisticsForecast>();
+    Future<AiStatisticsForecast> request = first.future;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: SingleChildScrollView(
-            child: GeminiForecastPanel(
-              forecast: Future.value(
-                AiStatisticsForecast(
-                  summary: 'The recorded routine may remain stable.',
-                  predictedCompletion: 82,
-                  completionLower: 68,
-                  completionUpper: 91,
-                  trend: 'stable',
-                  possibleFallAlertLevel: 'low',
-                  actions: const ['Check unresolved reminders.'],
-                  limitations: 'Only saved records were analysed.',
-                  model: 'openai/gpt-oss-20b',
-                  generatedAt: DateTime(2026, 10, 11),
-                  cached: true,
-                ),
+            child: StatefulBuilder(
+              builder: (context, setState) => GeminiForecastPanel(
+                forecast: request,
+                outlook: const CompletionOutlook(67, 48, 81, 10),
+                onRetry: () => setState(() {
+                  request = retry.future;
+                }),
               ),
-              onRetry: () {},
             ),
           ),
         ),
+      ),
+    );
+    expect(find.text('Analysing recorded patterns…'), findsOneWidget);
+    expect(find.text('Next 7 days · completion outlook'), findsNothing);
+    first.completeError(const StatisticsForecastException('Offline'));
+    await tester.pumpAndSettle();
+    expect(find.text('AI Forecast'), findsNothing);
+    expect(find.text('Next 7 days · completion outlook'), findsOneWidget);
+    expect(find.text('Around 67%'), findsOneWidget);
+    await tester.tap(find.text('Try AI Forecast again'));
+    await tester.pump();
+    expect(find.text('Next 7 days · completion outlook'), findsNothing);
+    expect(find.text('Analysing recorded patterns…'), findsOneWidget);
+    retry.complete(
+      AiStatisticsForecast(
+        summary: 'The recorded routine may remain stable.',
+        predictedCompletion: 82,
+        completionLower: 68,
+        completionUpper: 91,
+        trend: 'stable',
+        possibleFallAlertLevel: 'low',
+        actions: const ['Check unresolved reminders.'],
+        limitations: 'Only saved records were analysed.',
+        model: 'openai/gpt-oss-20b',
+        generatedAt: DateTime(2026, 10, 11),
+        cached: true,
       ),
     );
     await tester.pumpAndSettle();
@@ -147,6 +170,8 @@ void main() {
     expect(find.text('82%'), findsOneWidget);
     expect(find.textContaining('68–91%'), findsOneWidget);
     expect(find.textContaining('not medical advice'), findsOneWidget);
+    expect(find.text('Next 7 days · completion outlook'), findsNothing);
+    expect(find.text('Try AI Forecast again'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

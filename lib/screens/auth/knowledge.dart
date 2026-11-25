@@ -48,6 +48,7 @@ class KnowledgeScreen extends StatelessWidget {
     ),
   ];
 
+  // Show the health knowledge content and its loading or error state.
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: elderlyPageBackground,
@@ -133,6 +134,7 @@ class KnowledgeScreen extends StatelessWidget {
     ),
   );
 
+  // Choose the fallback message if the knowledge content cannot load.
   static void _sourceError(BuildContext context) =>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

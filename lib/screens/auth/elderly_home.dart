@@ -37,6 +37,7 @@ class PossibleFallCountdownDialog extends StatefulWidget {
   final DateTime? deadline;
   final bool manageFeedback;
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<PossibleFallCountdownDialog> createState() =>
       _PossibleFallCountdownDialogState();
@@ -49,6 +50,7 @@ class _PossibleFallCountdownDialogState
   late int _remainingSeconds;
   bool _completed = false;
 
+  // Start the fall countdown and warning feedback.
   @override
   void initState() {
     super.initState();
@@ -75,11 +77,13 @@ class _PossibleFallCountdownDialogState
     });
   }
 
+  // Work out the countdown from its deadline so timer delays do not extend it.
   int _secondsLeft() => widget.deadline == null
       ? widget.countdownDuration.inSeconds
       : (widget.deadline!.difference(DateTime.now()).inMilliseconds / 1000)
             .ceil();
 
+  // Finish the fall dialog with the user's response only once.
   void _respond(FallSafetyResponse response) {
     if (_completed || !mounted) return;
     _completed = true;
@@ -88,6 +92,8 @@ class _PossibleFallCountdownDialogState
     Navigator.of(context).pop(response);
   }
 
+  // Cancel the timers and subscriptions, then release the controllers when this page is
+  // removed.
   @override
   void dispose() {
     _timer?.cancel();
@@ -95,6 +101,7 @@ class _PossibleFallCountdownDialogState
     super.dispose();
   }
 
+  // Show the fall countdown with safe and help responses.
   @override
   Widget build(BuildContext context) => AlertDialog(
     icon: const Icon(Icons.warning_amber_rounded, color: _alertRed, size: 52),
@@ -176,6 +183,7 @@ class ElderlyHomeScreen extends StatefulWidget {
   final bool loadRemoteProfile;
   final String initialName;
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<ElderlyHomeScreen> createState() => _ElderlyHomeScreenState();
 }
@@ -215,6 +223,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
   Timer? _wearableRefreshTimer;
   DateTime? _lastAutomaticEmergency;
 
+  // Load the home-page data and connect phone and watch monitoring updates.
   @override
   void initState() {
     super.initState();
@@ -246,6 +255,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     }
   }
 
+  // Listen to the current elderly account's medicine schedules.
   void _setMedicationStream(String? elderlyId) {
     if (elderlyId == null || elderlyId.isEmpty || _medicationStream != null) {
       return;
@@ -260,6 +270,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
         .snapshots();
   }
 
+  // Subscribe to watch events and read the current watch status.
   Future<void> _initializeWearable() async {
     final bridge = WearableBridgeService.instance;
     await bridge.initialize();
@@ -272,6 +283,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     );
   }
 
+  // Reload profile, medicines and device status for the home page.
   Future<void> _refreshPage() async {
     await Future.wait<void>(<Future<void>>[
       _loadUserData(),
@@ -279,6 +291,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     ]);
   }
 
+  // Handle new watch activity, connection or emergency events.
   Future<void> _onWearableEvent(Map<String, dynamic> event) async {
     if (!mounted) return;
     switch (event['type']) {
@@ -288,12 +301,14 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     }
   }
 
+  // Copy the watch status into the values shown on the home page.
   void _applyWearableStatus(WearableStatus status) {
     if (!mounted) return;
     setState(() => _wearable = status);
     unawaited(ActivityStatusService.instance.publishWatch(status));
   }
 
+  // Load the elderly account's name and emergency contact details.
   Future<void> _loadUserData() async {
     if (!widget.loadRemoteProfile) return;
     if (mounted) setState(() => _isLoadingProfile = true);
@@ -326,6 +341,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     }
   }
 
+  // Refresh phone medicine alarms using the loaded schedules and records.
   void _syncMedicationAlarms(List<MedicationSchedule> schedules) {
     final elderlyId = FirebaseAuth.instance.currentUser?.uid;
     if (elderlyId == null) return;
@@ -347,6 +363,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     });
   }
 
+  // Update the phone activity card and handle a new possible fall.
   void _onActivityChanged() {
     if (!mounted) return;
     final next = _activityMonitor.snapshot;
@@ -377,6 +394,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     }
   }
 
+  // Create the pending fall event and remember it for the countdown response.
   Future<DocumentReference<Map<String, dynamic>>?> _recordPossibleFall(
     ActivitySnapshot snapshot,
   ) async {
@@ -398,6 +416,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     }
   }
 
+  // Finish the current fall event and save its final status.
   void _finishFallEvent(String status) {
     final event = _activeFallEvent;
     _activeFallEvent = null;
@@ -405,6 +424,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     unawaited(_updateFallEvent(event, status));
   }
 
+  // Update the saved fall event with the user's response.
   Future<void> _updateFallEvent(
     Future<DocumentReference<Map<String, dynamic>>?> event,
     String status,
@@ -421,6 +441,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     }
   }
 
+  // Open one warning countdown for the current possible fall.
   Future<void> _showPossibleFallDialog() async {
     if (_fallDialogOpen) return;
     _fallDialogOpen = true;
@@ -452,6 +473,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     );
   }
 
+  // Show the result of a fall warning handled by the background service.
   Future<void> _showBackgroundFallResult(PhoneFallMonitor monitor) async {
     final title = monitor.deliveryTitle ?? 'SOS saved — check delivery';
     final message =
@@ -472,6 +494,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     );
   }
 
+  // Start the manual SOS flow and send the emergency details when confirmed.
   Future<void> _triggerSos({
     required String source,
     String? activityLabel,
@@ -499,6 +522,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
       final alert = user == null
           ? null
           : FirebaseFirestore.instance.collection('emergency_alerts').doc();
+      // Try the direct emergency call and open the dialler if the call cannot start.
       Future<({bool callRequested, bool diallerOpened})> contact() async {
         if (phone.isEmpty) return (callRequested: false, diallerOpened: false);
         if (await _invokeSosAction('callContact', {'phone': phone})) {
@@ -595,6 +619,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     }
   }
 
+  // Ask Android to perform the requested SOS action.
   Future<bool> _invokeSosAction(
     String method,
     Map<String, Object> arguments,
@@ -611,11 +636,14 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     }
   }
 
+  // Open the emergency number in the phone's dialler.
   Future<bool> _openEmergencyDialler(String phone) => launchUrl(
     Uri(scheme: 'tel', path: phone.replaceAll(RegExp(r'[^0-9+]'), '')),
     mode: LaunchMode.externalApplication,
   );
 
+  // Cancel the timers and subscriptions, then remove the registered listeners, then release
+  // the controllers when this page is removed.
   @override
   void dispose() {
     _wearableRefreshTimer?.cancel();
@@ -629,6 +657,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     super.dispose();
   }
 
+  // Show the elderly home page with activity, SOS and medicine reminders.
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -699,11 +728,13 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     );
   }
 
+  // Show the elderly user's greeting and account heading.
   Widget _buildHeader() => ElderlyPageHeader(
     title: 'Elderly Dashboard',
     onProfile: _openProfileScreen,
   );
 
+  // Save the monitoring switch and update the phone fall monitor.
   Future<void> _toggleFallDetection() async {
     if (_monitoringBusy) return;
     setState(() => _monitoringBusy = true);
@@ -735,6 +766,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     }
   }
 
+  // Show the latest phone and watch movement status.
   Widget _buildActivityCard() {
     final monitor = _activityMonitor;
     final detectionOn = monitor is PhoneFallMonitor
@@ -985,6 +1017,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     );
   }
 
+  // Show the manual SOS action for asking for help.
   Widget _buildSosCard() {
     return Container(
       width: double.infinity,
@@ -1135,6 +1168,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     );
   }
 
+  // Show the next medication reminders on the home page.
   Widget _buildMedicationCard() {
     return _sectionCard(
       child: Column(
@@ -1221,6 +1255,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     );
   }
 
+  // Explain why there are no medicine reminders to display.
   Widget _emptyMedicationMessage() {
     return const Padding(
       padding: EdgeInsets.symmetric(vertical: 12),
@@ -1242,6 +1277,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     );
   }
 
+  // Show one medicine's next reminder and response status.
   Widget _medicationRow(MedicationSchedule medication) {
     final hour = medication.hour % 12 == 0 ? 12 : medication.hour % 12;
     final minute = medication.minute.toString().padLeft(2, '0');
@@ -1300,6 +1336,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     );
   }
 
+  // Show today's dose and fall-alert totals.
   Widget _buildHealthSummary() {
     final monitoringActive = _activity.state == ActivityMonitorState.active;
     final watchActive = _wearable.monitoringActive;
@@ -1393,6 +1430,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     );
   }
 
+  // Show one labelled count in the home-page summary.
   Widget _summaryItem({
     required IconData icon,
     required Color iconColor,
@@ -1447,6 +1485,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     );
   }
 
+  // Wrap a home-page section in the shared card style.
   Widget _sectionCard({required Widget child, VoidCallback? onTap}) {
     final content = Container(
       width: double.infinity,
@@ -1473,6 +1512,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     );
   }
 
+  // Show navigation to the elderly app's main pages.
   Widget _buildBottomNavigation() => ElderlyBottomNavigation(
     selectedIndex: 0,
     onHome: () => _scrollController.animateTo(
@@ -1485,6 +1525,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     onProfile: _openProfileScreen,
   );
 
+  // Explain the current phone and watch activity status in a dialog.
   Future<void> _showActivityDetails() async {
     await showModalBottomSheet<void>(
       context: context,
@@ -1517,6 +1558,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     );
   }
 
+  // Open the page with phone and watch monitoring details.
   void _openMonitoringScreen() {
     Navigator.push<void>(
       context,
@@ -1527,6 +1569,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     );
   }
 
+  // Open the elderly profile page.
   Future<void> _openProfileScreen() async {
     final changed = await Navigator.push<bool>(
       context,
@@ -1541,6 +1584,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     if (changed == true && mounted) await _loadUserData();
   }
 
+  // Choose the greeting based on the current hour.
   String _greeting() {
     final hour = DateTime.now().hour;
     if (hour < 12) return 'Good morning';
@@ -1548,8 +1592,10 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     return 'Good evening';
   }
 
+  // Use one spelling when comparing activity labels.
   String _normaliseLabel(String value) => value.trim().toLowerCase();
 
+  // Turn the model label into a simple activity name.
   String _displayActivity(String value) {
     final normalized = _normaliseLabel(value);
     const labels = <String, String>{
@@ -1574,6 +1620,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     return labels[normalized] ?? value;
   }
 
+  // Choose the colour and icon for this activity.
   _ActivityAppearance _appearanceFor(String value) {
     switch (_normaliseLabel(value)) {
       case 'walking':
@@ -1634,11 +1681,13 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen>
     }
   }
 
+  // Show when the last activity update arrived.
   String _formatUpdatedAt(DateTime? dateTime) {
     if (dateTime == null) return 'waiting for first result';
     return 'updated ${_formatClock(dateTime)}';
   }
 
+  // Show the time in a readable 12-hour format.
   String _formatClock(DateTime dateTime) {
     final hour = dateTime.hour % 12 == 0 ? 12 : dateTime.hour % 12;
     final minute = dateTime.minute.toString().padLeft(2, '0');

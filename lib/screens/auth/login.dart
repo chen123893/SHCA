@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
@@ -20,6 +21,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   static const Color primaryColor = Color(0xFFE85D4A);
 
+  // release the controllers when this page is removed.
   @override
   void dispose() {
     _emailController.dispose();
@@ -27,6 +29,7 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  // Validate the credentials and sign in to the existing Firebase account.
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -107,6 +110,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  // Send the password reset email for the address entered in the form.
   Future<void> _sendPasswordReset() async {
     final controller = TextEditingController(
       text: _emailController.text.trim(),
@@ -168,6 +172,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  // Keep the login form fields styled the same way.
   InputDecoration _buildInputDecoration({
     required String labelText,
     required IconData prefixIcon,
@@ -204,6 +209,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  // Show account sign-in, password reset and registration actions.
   @override
   Widget build(BuildContext context) {
     return Scaffold(

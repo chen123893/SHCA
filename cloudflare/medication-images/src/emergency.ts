@@ -11,6 +11,7 @@ export interface EmergencyEnv {
   MEDICATION_IMAGES: R2Bucket;
 }
 
+// Verify the Firebase bearer token before accepting a phone emergency request.
 async function firebaseUserToken(env: EmergencyEnv, uid: string): Promise<string> {
   const service = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT ?? "{}");
   if (!env.FIREBASE_WEB_API_KEY || !service.client_email || !service.private_key) {
@@ -42,11 +43,13 @@ type CareLinkRow = { document?: Doc };
 type CaregiverRecipient = { id: string; email: string };
 let accessToken: { value: string; expires: number; email: string } | undefined;
 
+// Return the emergency result as JSON with the required response headers.
 const reply = (value: unknown, status = 200) => Response.json(value, {
   status,
   headers: { "cache-control": "no-store" },
 });
 
+// Get a Google access token for the backend's Firebase requests.
 async function googleToken(env: EmergencyEnv): Promise<string> {
   const service = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT ?? "{}");
   if (!service.client_email || !service.private_key || service.project_id !== env.FIREBASE_PROJECT_ID) {
@@ -67,15 +70,18 @@ async function googleToken(env: EmergencyEnv): Promise<string> {
   return value.access_token;
 }
 
+// Build the Firestore REST URL for this Firebase project.
 function base(env: EmergencyEnv): string {
   return `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents`;
 }
 
+// Read the requested Firestore document using the backend access token.
 async function read(env: EmergencyEnv, path: string, token: string): Promise<Doc | null> {
   const response = await fetch(`${base(env)}/${path}`, { headers: { authorization: `Bearer ${token}` } });
   return response.ok ? await response.json() as Doc : null;
 }
 
+// Find linked caregivers with an email address for the emergency message.
 async function caregiverRecipients(
   env: EmergencyEnv,
   uid: string,
@@ -102,16 +108,19 @@ async function caregiverRecipients(
   return [...recipients.values()];
 }
 
+// Get the caregiver account IDs connected to this elderly account.
 async function caregiverIds(env: EmergencyEnv, uid: string, token: string): Promise<string[]> {
   return (await caregiverRecipients(env, uid, token)).map(recipient => recipient.id);
 }
 
+// Escape user-supplied text before placing it in the alert email.
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, character => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   })[character]!);
 }
 
+// Use a repeatable key so retries refer to the same emergency email.
 async function emergencyEmailIdempotencyKey(value: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   const bytes = [...new Uint8Array(digest).slice(0, 16)];
@@ -121,6 +130,7 @@ async function emergencyEmailIdempotencyKey(value: string): Promise<string> {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+// Send the alert email to each linked caregiver and record delivery results.
 async function deliverEmergencyEmails(
   env: EmergencyEnv,
   uid: string,
@@ -203,6 +213,7 @@ async function deliverEmergencyEmails(
   };
 }
 
+// Send the emergency notification to the linked caregivers' registered devices.
 async function deliverPush(
   env: EmergencyEnv,
   uid: string,
@@ -332,11 +343,13 @@ interface WatchRequest {
   locationJson?: unknown;
 }
 
+// Convert the encoded signature data back into bytes.
 function decodeBase64(value: string): Uint8Array {
   const binary = atob(value);
   return Uint8Array.from(binary, character => character.charCodeAt(0));
 }
 
+// Check the signed watch emergency before trusting its account and event data.
 async function verifyWatchSignature(publicKey: string, signature: string, message: string): Promise<boolean> {
   try {
     const key = await crypto.subtle.importKey(
@@ -357,6 +370,7 @@ async function verifyWatchSignature(publicKey: string, signature: string, messag
   }
 }
 
+// Prepare the emergency values in Firestore's REST field format.
 function fields(values: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(values).map(([key, value]) => {
     if (typeof value === "string") return [key, { stringValue: value }];
@@ -369,6 +383,7 @@ function fields(values: Record<string, unknown>): Record<string, unknown> {
   }));
 }
 
+// Create the emergency document and handle an event that was already saved.
 async function createDocument(env: EmergencyEnv, path: string, values: Record<string, unknown>, token: string): Promise<"created" | "existing" | false> {
   const response = await fetch(`${base(env)}/${path}?currentDocument.exists=false`, {
     method: "PATCH",

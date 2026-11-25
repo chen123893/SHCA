@@ -30,6 +30,7 @@ import java.util.concurrent.TimeUnit
 
 /** Sends fall and SOS texts using the elderly phone's default SMS SIM. */
 class FallSmsWorker(context: Context, parameters: WorkerParameters) : Worker(context, parameters) {
+    // Send the queued emergency SMS when its account and permission checks pass.
     override fun doWork(): Result {
         val context = applicationContext
         val uid = inputData.getString("uid") ?: return Result.failure()
@@ -107,22 +108,27 @@ class FallSmsWorker(context: Context, parameters: WorkerParameters) : Worker(con
         private const val MAX_AGE = 15 * 60_000L
         private val PHONE = Regex("^[+][1-9][0-9]{8,14}$")
 
+        // Check whether Android has granted the SMS permission.
         fun hasPermission(context: Context) =
             context.checkSelfPermission(Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED
 
+        // Read whether automatic emergency SMS is enabled for this account.
         fun isEnabled(context: Context, uid: String) = hasPermission(context) &&
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("enabled:$uid", false)
 
+        // Save the account's choice for automatic emergency SMS.
         fun setEnabled(context: Context, uid: String, enabled: Boolean) {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .edit().putBoolean("enabled:$uid", enabled).apply()
         }
 
+        // Check the saved SMS preference together with the device permission.
         private fun canSend(context: Context, uid: String, detectedAt: Long) =
             FirebaseAuth.getInstance().currentUser?.uid == uid &&
                 isEnabled(context, uid) &&
                 System.currentTimeMillis() - detectedAt in 0..MAX_AGE
 
+        // Queue this emergency SMS under a unique event so retries do not duplicate it.
         fun enqueue(context: Context, uid: String, eventId: String, detectedAt: Long, manualSos: Boolean = false, location: Map<String, Any>? = null): Boolean {
             if (!canSend(context, uid, detectedAt)) return false
             return try {
@@ -157,12 +163,14 @@ class FallSmsWorker(context: Context, parameters: WorkerParameters) : Worker(con
             return editor.commit()
         }
 
+        // Hash the delivery details for a stable worker identifier.
         private fun digest(value: String) = MessageDigest.getInstance("SHA-256")
             .digest(value.toByteArray()).joinToString("") { "%02x".format(it) }
     }
 }
 
 class FallSmsSentReceiver : BroadcastReceiver() {
+    // Handle Android's SMS delivery callback and update its saved result.
     override fun onReceive(context: Context, intent: Intent) {
         val part = intent.getIntExtra("partIndex", 0) + 1
         val count = intent.getIntExtra("partCount", 1)

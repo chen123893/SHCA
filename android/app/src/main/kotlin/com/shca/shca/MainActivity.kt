@@ -27,12 +27,14 @@ class MainActivity : FlutterActivity() {
     private var overlayPermissionResult: MethodChannel.Result? = null
     private var fullScreenPermissionResult: MethodChannel.Result? = null
 
+    // Prepare the phone activity and capture any alarm intent that opened it.
     override fun onCreate(savedInstanceState: Bundle?) {
         captureMedicationAlarm(intent)
         super.onCreate(savedInstanceState)
         handleFallAlarmPreview(intent)
     }
 
+    // Handle a medicine or fall alarm intent delivered to the existing activity.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -40,6 +42,7 @@ class MainActivity : FlutterActivity() {
         handleFallAlarmPreview(intent)
     }
 
+    // Open the local fall-warning preview for a supported debug request.
     private fun handleFallAlarmPreview(intent: Intent?) {
         if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE == 0 ||
             intent?.action != "com.shca.shca.PREVIEW_PHONE_FALL_ALARM") return
@@ -49,6 +52,7 @@ class MainActivity : FlutterActivity() {
         }, 3000)
     }
 
+    // Detach native listeners when the phone activity is destroyed.
     override fun onDestroy() {
         if (PhoneMonitoringService.sink === monitoringEventSink) PhoneMonitoringService.sink = null
         monitoringEventSink = null
@@ -56,6 +60,7 @@ class MainActivity : FlutterActivity() {
         super.onDestroy()
     }
 
+    // Return the requested phone permission result to the waiting Flutter call.
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (locationChannel?.permissionResult(requestCode) == true) return
@@ -85,6 +90,7 @@ class MainActivity : FlutterActivity() {
         } else result.error("notifications-disabled", "Allow notifications to show fall detection status while SHCA runs in the background.", null)
     }
 
+    // Finish a native system action requested from the Flutter interface.
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == FULL_SCREEN_PERMISSION_REQUEST) {
@@ -98,6 +104,7 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    // Connect Flutter channels to Android permissions, alarms, calls and the watch bridge.
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         val messenger = flutterEngine.dartExecutor.binaryMessenger
@@ -154,11 +161,13 @@ class MainActivity : FlutterActivity() {
             }
         }
         EventChannel(messenger, PhoneMonitoringService.EVENT_CHANNEL).setStreamHandler(object : EventChannel.StreamHandler {
+            // Connect this Flutter listener to its native event source.
             override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
                 monitoringEventSink = events
                 PhoneMonitoringService.sink = events
                 events?.success(PhoneMonitoringService.state(this@MainActivity))
             }
+            // Stop sending native events to this Flutter listener.
             override fun onCancel(arguments: Any?) {
                 if (PhoneMonitoringService.sink === monitoringEventSink) PhoneMonitoringService.sink = null
                 monitoringEventSink = null
@@ -197,15 +206,18 @@ class MainActivity : FlutterActivity() {
             } catch (error: Exception) { result.error("monitoring-unavailable", error.message, null) }
         }
         EventChannel(messenger, EVENT_CHANNEL).setStreamHandler(object : EventChannel.StreamHandler {
+            // Connect this Flutter listener to its native event source.
             override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
                 WearableEventBus.sink = events
             }
 
+            // Stop sending native events to this Flutter listener.
             override fun onCancel(arguments: Any?) {
                 WearableEventBus.sink = null
             }
         })
         EventChannel(messenger, ALARM_EVENT_CHANNEL).setStreamHandler(object : EventChannel.StreamHandler {
+            // Connect this Flutter listener to its native event source.
             override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
                 alarmEventSink = events
                 pendingMedicationAlarmPayload?.let { payload ->
@@ -214,6 +226,7 @@ class MainActivity : FlutterActivity() {
                 }
             }
 
+            // Stop sending native events to this Flutter listener.
             override fun onCancel(arguments: Any?) {
                 alarmEventSink = null
             }
@@ -307,6 +320,7 @@ class MainActivity : FlutterActivity() {
                         result.error("invalid-alarm", "Alarm key is missing.", null)
                     } else {
                         try {
+                            MedicationRingingService.transferToFlutter()
                             MedicationAlarmFeedback.start(this, key)
                             result.success(null)
                         } catch (error: Exception) {
@@ -318,6 +332,18 @@ class MainActivity : FlutterActivity() {
                 "stopMedicationAlarmFeedback" -> {
                     MedicationAlarmFeedback.stop(call.argument<String>("alarmKey"))
                     result.success(null)
+                }
+                "cancelMedicationAlarmsForOwner" -> {
+                    call.argument<String>("elderlyId")?.let { MedicationAlarmScheduler.cancelOwner(this, it) }
+                    result.success(null)
+                }
+                "updateMedicationRecord" -> {
+                    val response = call.arguments as? Map<*, *>
+                    if (response == null) result.error("invalid-response", "Dose response is missing.", null)
+                    else {
+                        MedicationAlarmScheduler.updateRecord(this, org.json.JSONObject(response))
+                        result.success(null)
+                    }
                 }
                 "scheduleMedicationAlarm" -> {
                     val id = (call.argument<Number>("id"))?.toInt()
@@ -356,12 +382,12 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    // Accept the medicine alarm payload only while its native alarm is still active.
     private fun captureMedicationAlarm(intent: Intent?) {
         if (intent?.action != MedicationAlarmScheduler.ACTION_MEDICATION_ALARM) return
         val payload = intent.getStringExtra(MedicationAlarmScheduler.EXTRA_PAYLOAD)
         val id = intent.getIntExtra(MedicationAlarmScheduler.EXTRA_ALARM_ID, -1)
-        if (id >= 0) MedicationAlarmScheduler.consume(this, id)
-        if (payload.isNullOrEmpty()) return
+        if (payload.isNullOrEmpty() || !MedicationAlarmScheduler.isActive(this, id, payload)) return
         val sink = alarmEventSink
         if (sink == null) {
             pendingMedicationAlarmPayload = payload

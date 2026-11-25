@@ -32,6 +32,7 @@ object WatchPaths {
 
 object WearableEventBus {
     var sink: EventChannel.EventSink? = null
+    // Send a watch event to the connected Flutter listener.
     fun emit(context: Context, event: Map<String, Any?>, persist: Boolean = false) {
         Handler(Looper.getMainLooper()).post { sink?.success(event) }
     }
@@ -40,6 +41,7 @@ object WearableEventBus {
 object WatchBridge {
     private const val PREFS = "shca_wearable_bridge"
     private const val SHCA_WATCH_CAPABILITY = "shca_watch_app"
+    // Refresh the watch connection and return the latest saved status.
     fun getStatus(context: Context, result: MethodChannel.Result) {
         Wearable.getCapabilityClient(context)
             .getCapability(SHCA_WATCH_CAPABILITY, CapabilityClient.FILTER_REACHABLE)
@@ -48,6 +50,7 @@ object WatchBridge {
             }
             .addOnFailureListener { result.success(statusMap(context, false)) }
     }
+    // Check which reachable devices support the SHCA watch capability.
     fun refreshConnection(context: Context) {
         Wearable.getCapabilityClient(context)
             .getCapability(SHCA_WATCH_CAPABILITY, CapabilityClient.FILTER_REACHABLE)
@@ -58,9 +61,11 @@ object WatchBridge {
                 WearableEventBus.emit(context, statusMap(context, false))
             }
     }
+    // Notify Flutter when the watch connection state changes.
     fun emitConnection(context: Context, connected: Boolean) {
         WearableEventBus.emit(context, statusMap(context, connected))
     }
+    // Prepare the watch status values used by the phone interface.
     private fun statusMap(context: Context, connected: Boolean): Map<String, Any?> {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         return mapOf("type" to "status", "connected" to connected,
@@ -68,6 +73,7 @@ object WatchBridge {
             "fallProbability" to p.getFloat("fallProbability", 0f).toDouble(),
             "possibleFall" to p.getBoolean("possibleFall", false), "updatedAt" to p.getLong("updatedAt", 0))
     }
+    // Send the signed-in phone state and medicine list to the watch.
     fun setPhoneState(context: Context, values: Map<String, Any?>, result: MethodChannel.Result) {
         val request = PutDataMapRequest.create(WatchPaths.PHONE_STATE).apply {
             dataMap.putString("userId", values["userId"] as? String ?: "")
@@ -79,6 +85,7 @@ object WatchBridge {
             .addOnSuccessListener { result.success(true) }
             .addOnFailureListener { result.error("phone-state", "Could not sync phone account.", null) }
     }
+    // Send one medicine reminder to the watch data layer.
     fun syncMedication(context: Context, values: Map<String, Any?>, result: MethodChannel.Result) {
         val request = PutDataMapRequest.create(WatchPaths.MEDICATION).apply {
             dataMap.putString("scheduleJson", values["scheduleJson"] as? String ?: "[]")
@@ -89,14 +96,18 @@ object WatchBridge {
             .addOnSuccessListener { result.success(true) }
             .addOnFailureListener { result.error("watch-sync", "Could not sync today's medicines.", null) }
     }
+    // Tell the watch that its current possible-fall warning has been handled.
     fun acknowledgeFall(context: Context, result: MethodChannel.Result) {
         Wearable.getNodeClient(context).connectedNodes.addOnSuccessListener { nodes ->
             nodes.forEach { Wearable.getMessageClient(context).sendMessage(it.id, WatchPaths.ACKNOWLEDGE_FALL, byteArrayOf()) }
             result.success(nodes.isNotEmpty())
         }.addOnFailureListener { result.success(false) }
     }
+    // Read the watch events saved before the phone interface was ready.
     fun takePendingEvents(context: Context): List<Map<String, Any?>> = emptyList()
+    // Clear the saved watch events after they have been processed.
     fun clearPendingEvents(context: Context) { /* Native workers own durable delivery. */ }
+    // Save the latest watch activity and connection details locally.
     fun saveStatus(context: Context, map: DataMap) {
         val preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         preferences.edit()
@@ -142,6 +153,7 @@ object WatchBridge {
                 "updatedAt" to FieldValue.serverTimestamp(),
             ), SetOptions.merge())
     }
+    // Send the result of a handled watch event back to its source device.
     fun acknowledge(context: Context, node: String, id: String, status: String, message: String, medicine: Boolean = false) {
         val path = if (medicine) WatchPaths.MEDICATION_ACK else WatchPaths.ACK
         val json = JSONObject(mapOf("eventId" to id, "status" to status, "message" to message))
@@ -152,6 +164,7 @@ object WatchBridge {
         Wearable.getDataClient(context).putDataItem(request)
         if (node.isNotEmpty()) Wearable.getMessageClient(context).sendMessage(node, path, json.toString().toByteArray())
     }
+    // Show the phone notification for an emergency received from the watch.
     fun showEmergencyNotification(context: Context, message: String, phone: String = "") {
         val manager = context.getSystemService(NotificationManager::class.java)
         val channel = "shca_watch_emergency_v2"
@@ -177,20 +190,25 @@ object WatchBridge {
 }
 
 class WatchDataLayerService : WearableListenerService() {
+    // Refresh the connection state when the connected watch nodes change.
     override fun onConnectedNodes(connectedNodes: List<Node>) {
         WatchBridge.refreshConnection(this)
     }
+    // Update the connection state when a watch connects.
     override fun onPeerConnected(peer: Node) {
         WatchBridge.refreshConnection(this)
     }
+    // Update the connection state when a watch disconnects.
     override fun onPeerDisconnected(peer: Node) {
         WatchBridge.refreshConnection(this)
     }
+    // Refresh the reachable SHCA watch devices when their capability changes.
     override fun onCapabilityChanged(capabilityInfo: CapabilityInfo) {
         if (capabilityInfo.name == "shca_watch_app") {
             WatchBridge.emitConnection(this, capabilityInfo.nodes.isNotEmpty())
         }
     }
+    // Handle SHCA data items received from the watch data layer.
     override fun onDataChanged(events: DataEventBuffer) {
         events.forEach { event ->
             if (event.type != DataEvent.TYPE_CHANGED) return@forEach
@@ -211,6 +229,7 @@ class WatchDataLayerService : WearableListenerService() {
             }
         }
     }
+    // Handle SHCA messages received from a watch.
     override fun onMessageReceived(event: MessageEvent) {
         if (WatchSignInBridge.receive(event)) return
         if (event.path != WatchPaths.EMERGENCY && event.path != WatchPaths.MEDICATION_ACTION) return
@@ -226,6 +245,7 @@ class WatchDataLayerService : WearableListenerService() {
             accept(map, event.sourceNodeId, event.path == WatchPaths.MEDICATION_ACTION)
         } catch (_: Exception) { /* Legacy wake-only messages contain no payload. */ }
     }
+    // Validate and queue the incoming watch event for the phone to handle.
     private fun accept(map: DataMap, node: String, medicine: Boolean) {
         val id = map.getString("eventId") ?: return
         if (!id.matches(Regex("[A-Za-z0-9_-]{1,100}"))) return

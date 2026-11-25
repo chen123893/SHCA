@@ -15,6 +15,7 @@ class ChangePasswordScreen extends StatefulWidget {
   final Color backgroundColor;
   final PasswordChangeService? passwordChangeService;
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<ChangePasswordScreen> createState() => _ChangePasswordScreenState();
 }
@@ -32,6 +33,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   bool _saving = false;
   String? _errorMessage;
 
+  // Prepare the password form and its validation state.
   @override
   void initState() {
     super.initState();
@@ -39,6 +41,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         widget.passwordChangeService ?? FirebasePasswordChangeService();
   }
 
+  // release the controllers when this page is removed.
   @override
   void dispose() {
     _currentPasswordController.dispose();
@@ -47,6 +50,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     super.dispose();
   }
 
+  // Validate the form and ask the password service to save the change.
   Future<void> _changePassword() async {
     FocusScope.of(context).unfocus();
     setState(() => _errorMessage = null);
@@ -74,11 +78,13 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     }
   }
 
+  // Require the current password before allowing a change.
   String? _validateCurrentPassword(String? value) {
     if (value == null || value.isEmpty) return 'Enter your current password.';
     return null;
   }
 
+  // Check the new password against the form's length rules.
   String? _validateNewPassword(String? value) {
     final password = value ?? '';
     if (password.isEmpty) return 'Enter a new password.';
@@ -101,6 +107,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     return null;
   }
 
+  // Make sure the confirmation matches the new password.
   String? _validateConfirmation(String? value) {
     if (value == null || value.isEmpty) return 'Confirm the new password.';
     if (value != _newPasswordController.text) {
@@ -109,6 +116,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     return null;
   }
 
+  // Keep the password form fields styled the same way.
   InputDecoration _decoration({
     required String label,
     required IconData icon,
@@ -129,6 +137,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     );
   }
 
+  // Show the current, new and confirmation password fields.
   @override
   Widget build(BuildContext context) {
     return Scaffold(

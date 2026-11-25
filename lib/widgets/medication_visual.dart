@@ -14,6 +14,7 @@ class MedicationVisual extends StatefulWidget {
   final double size;
   final MedicationImageStorageService storageService;
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<MedicationVisual> createState() => _MedicationVisualState();
 }
@@ -21,12 +22,14 @@ class MedicationVisual extends StatefulWidget {
 class _MedicationVisualState extends State<MedicationVisual> {
   Future<MedicationImageRequest>? _requestFuture;
 
+  // Prepare the medicine photo request when the widget first appears.
   @override
   void initState() {
     super.initState();
     _prepareRequest();
   }
 
+  // Reload the photo request when the medicine image changes.
   @override
   void didUpdateWidget(covariant MedicationVisual oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -36,6 +39,7 @@ class _MedicationVisualState extends State<MedicationVisual> {
     }
   }
 
+  // Prepare an authenticated request if the medicine uses a private photo.
   void _prepareRequest() {
     final medication = widget.medication;
     if (medication.imageKey.isEmpty ||
@@ -50,6 +54,7 @@ class _MedicationVisualState extends State<MedicationVisual> {
     );
   }
 
+  // Show the medicine photo or the matching local medicine image.
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -69,6 +74,7 @@ class _MedicationVisualState extends State<MedicationVisual> {
     );
   }
 
+  // Show the medicine photo with its loading and error states.
   Widget _buildImage() {
     final requestFuture = _requestFuture;
     if (requestFuture == null) return _fallbackImage();
@@ -87,6 +93,7 @@ class _MedicationVisualState extends State<MedicationVisual> {
     );
   }
 
+  // Use the matching medicine-type image if there is no usable photo.
   Widget _fallbackImage() {
     return Padding(
       padding: EdgeInsets.all(widget.size * 0.10),
@@ -103,6 +110,7 @@ class _MedicationVisualState extends State<MedicationVisual> {
   }
 }
 
+// Choose a local image from the medicine's type and description.
 String medicineAssetFor(MedicationSchedule medication) {
   final name = medication.name.toLowerCase();
   final category = medication.category.toLowerCase();

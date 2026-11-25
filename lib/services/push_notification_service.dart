@@ -13,6 +13,7 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shca/services/medication_service.dart';
 import 'package:shca/services/medication_alarm_feedback.dart';
+import 'medication_reminder_plan.dart';
 import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
@@ -23,26 +24,32 @@ class MedicationNotificationTarget {
     this.scheduledAt,
     this.reminderAt,
     this.medicationSnapshot,
+    this.occurrenceId,
   });
 
   final String elderlyId;
   final String medicationId;
+  final String? occurrenceId;
   final DateTime? scheduledAt;
   final DateTime? reminderAt;
   final MedicationSchedule? medicationSnapshot;
 
+  // Ignore a medicine notification that belongs to another signed-in account.
   bool belongsTo(String? userId) => userId != null && elderlyId == userId;
 
+  // Encode the medicine and dose details carried by the notification.
   String toPayload() => jsonEncode(<String, Object>{
     'type': 'medication_reminder',
     'elderlyId': elderlyId,
     'medicationId': medicationId,
+    'occurrenceId': ?occurrenceId,
     if (scheduledAt != null) 'scheduledAt': scheduledAt!.millisecondsSinceEpoch,
     if (reminderAt != null) 'reminderAt': reminderAt!.millisecondsSinceEpoch,
     if (medicationSnapshot != null)
       'medicationSnapshot': medicationSnapshot!.toRecordSnapshot(),
   });
 
+  // Read a medicine notification only when its required fields are valid.
   static MedicationNotificationTarget? fromPayload(String? payload) {
     if (payload == null || payload.isEmpty) return null;
     try {
@@ -78,6 +85,7 @@ class MedicationNotificationTarget {
       }
       return MedicationNotificationTarget(
         medicationSnapshot: snapshot,
+        occurrenceId: value['occurrenceId'] as String?,
         elderlyId: elderlyId,
         medicationId: medicationId,
         scheduledAt: scheduledAtMillis == null
@@ -139,9 +147,24 @@ class PushNotificationService {
   StreamSubscription<User?>? _authSubscription;
   StreamSubscription<dynamic>? _nativeAlarmSubscription;
   bool _initialized = false;
+  Future<void>? _initializing;
+  Future<void> _alarmWork = Future<void>.value();
+  final Map<String, MedicationRecord> _localDoseResponses = {};
+  final Map<String, Map<int, String>> _scheduledMedicationSpecs = {};
+
+  // Run alarm updates one at a time so rescheduling cannot overlap.
+  Future<void> _queueAlarmWork(Future<void> Function() action) {
+    final next = _alarmWork.then((_) => action());
+    _alarmWork = next.catchError((Object error) {
+      debugPrint('Medication alarm update failed: $error');
+    });
+    return next;
+  }
+
   ({bool notifications, bool exact, bool fullScreen, bool appearOnTop})?
   _lastMedicationAlarmPermissions;
 
+  // Read the most recently checked Android alarm permissions.
   ({bool notifications, bool exact, bool fullScreen, bool appearOnTop})?
   get lastMedicationAlarmPermissions => _lastMedicationAlarmPermissions;
 
@@ -153,17 +176,27 @@ class PushNotificationService {
       StreamController<String>.broadcast();
   static const String _alarmOwnersKey = 'medication_alarm_owners_v1';
   static const String _activeAlarmOwnerKey = 'active_medication_alarm_owner_v1';
+  // Keep each account's remembered alarm IDs under its own preference key.
   String _allAlarmIdsKey(String elderlyId) =>
       'medication_all_alarm_ids_v1_$elderlyId';
+  // Keep each account's current schedule IDs under its own preference key.
   String _scheduledAlarmIdsKey(String elderlyId) =>
       'medication_alarm_ids_$elderlyId';
 
+  // Let the app open an alert when a notification is tapped.
   Stream<String> get notificationTapPayloads =>
       _notificationTapController.stream;
 
-  Future<void> initialize() async {
-    if (_initialized) return;
+  // Share one initialisation request if several screens need notifications at once.
+  Future<void> initialize() {
+    if (_initialized) return Future<void>.value();
+    return _initializing ??= _initialize().whenComplete(() {
+      _initializing = null;
+    });
+  }
 
+  // Set up notification channels, tap handlers and account cleanup.
+  Future<void> _initialize() async {
     tz_data.initializeTimeZones();
     var timezoneIdentifier = '';
     try {
@@ -236,17 +269,19 @@ class PushNotificationService {
     );
   }
 
+  // Keep the medicine alert payload and notify the app to open it.
   void _deliverMedicationPayload(String payload) {
     _pendingNotificationPayload = payload;
     _notificationTapController.add(payload);
   }
 
+  // Clear old medicine alarms when the signed-in account changes.
   Future<void> _reconcileMedicationAlarmOwner(String? signedInUserId) async {
     final preferences = await SharedPreferences.getInstance();
     final owner = preferences.getString(_activeAlarmOwnerKey);
     if (signedInUserId == null ||
         (owner != null && owner.isNotEmpty && owner != signedInUserId)) {
-      await _cancelMedicationRemindersInternal();
+      await _queueAlarmWork(() => _cancelMedicationRemindersInternal());
     }
   }
 
@@ -255,9 +290,10 @@ class PushNotificationService {
   Future<void> clearMedicationAlarmsForSignOut() async {
     await MedicationAlarmFeedback.stop();
     await initialize();
-    await _cancelMedicationRemindersInternal();
+    await _queueAlarmWork(() => _cancelMedicationRemindersInternal());
   }
 
+  // Cancel the remembered medicine alarms for the requested account.
   Future<void> _cancelMedicationRemindersInternal({String? elderlyId}) async {
     final preferences = await SharedPreferences.getInstance();
     final owners =
@@ -269,6 +305,7 @@ class PushNotificationService {
         : <String>[elderlyId];
     final cancelledIds = <int>{};
     for (final owner in targets) {
+      _scheduledMedicationSpecs.remove(owner);
       final values = <String>{
         ...?preferences.getStringList(_scheduledAlarmIdsKey(owner)),
         ...?preferences.getStringList(_allAlarmIdsKey(owner)),
@@ -279,6 +316,12 @@ class PushNotificationService {
         _medicationForegroundTimers.remove(id)?.cancel();
         await _notifications.cancel(id: id);
         await _cancelNativeMedicationAlarm(id);
+      }
+      if (Platform.isAndroid) {
+        await _alarmPermissionChannel.invokeMethod<void>(
+          'cancelMedicationAlarmsForOwner',
+          {'elderlyId': owner},
+        );
       }
       await preferences.remove(_scheduledAlarmIdsKey(owner));
       await preferences.remove(_allAlarmIdsKey(owner));
@@ -297,6 +340,7 @@ class PushNotificationService {
     await preferences.setStringList(_alarmOwnersKey, owners.toList()..sort());
   }
 
+  // Remember this alarm ID so it can be cancelled later.
   Future<void> _rememberMedicationAlarm(String elderlyId, int id) async {
     final preferences = await SharedPreferences.getInstance();
     final owners =
@@ -314,6 +358,7 @@ class PushNotificationService {
     await preferences.setString(_activeAlarmOwnerKey, elderlyId);
   }
 
+  // Remove the cancelled alarm ID from local tracking.
   Future<void> _forgetMedicationAlarm(String elderlyId, int id) async {
     final preferences = await SharedPreferences.getInstance();
     final ids =
@@ -326,6 +371,7 @@ class PushNotificationService {
     );
   }
 
+  // Use the phone's timezone when scheduling medicine alarms.
   void _setLocalTimezone(String deviceIdentifier) {
     // Some Android devices return legacy IANA aliases which are intentionally
     // omitted from the compact timezone database bundled by the Dart package.
@@ -356,12 +402,14 @@ class PushNotificationService {
     debugPrint('Falling back to UTC for medication reminder scheduling.');
   }
 
+  // Read the waiting notification payload once, then clear it.
   String? takePendingNotificationPayload() {
     final payload = _pendingNotificationPayload;
     _pendingNotificationPayload = null;
     return payload;
   }
 
+  // Check the Android permissions needed for medicine alarms.
   Future<({bool notifications, bool exact, bool fullScreen, bool appearOnTop})>
   medicationAlarmPermissionStatus() async {
     await initialize();
@@ -404,6 +452,7 @@ class PushNotificationService {
     );
   }
 
+  // Open the system permission prompts needed for reliable medicine alarms.
   Future<({bool notifications, bool exact, bool fullScreen, bool appearOnTop})>
   requestMedicationAlarmPermissions() async {
     await initialize();
@@ -433,88 +482,229 @@ class PushNotificationService {
     return medicationAlarmPermissionStatus();
   }
 
+  // Update future alarms from the schedules and saved dose responses.
   Future<void> syncMedicationReminders({
     required String elderlyId,
     required List<MedicationSchedule> schedules,
+    List<MedicationRecord>? records,
   }) async {
     if (!Platform.isAndroid) return;
     await initialize();
-    if (FirebaseAuth.instance.currentUser?.uid != elderlyId) {
-      await _cancelMedicationRemindersInternal(elderlyId: elderlyId);
-      return;
-    }
-    final preferences = await SharedPreferences.getInstance();
-    final owner = preferences.getString(_activeAlarmOwnerKey);
-    if (owner != null && owner.isNotEmpty && owner != elderlyId) {
-      await _cancelMedicationRemindersInternal();
-    }
-    final storageKey = _scheduledAlarmIdsKey(elderlyId);
-    final previousIds = preferences.getStringList(storageKey) ?? const [];
-    for (final storedId in previousIds) {
-      final id = int.tryParse(storedId);
-      if (id != null) {
+    await _queueAlarmWork(() async {
+      if (FirebaseAuth.instance.currentUser?.uid != elderlyId) {
+        await _cancelMedicationRemindersInternal(elderlyId: elderlyId);
+        return;
+      }
+      final saved =
+          records ??
+          await FirestoreMedicationRepository().loadRecords(elderlyId);
+      if (FirebaseAuth.instance.currentUser?.uid != elderlyId) return;
+      final scheduleById = {for (final item in schedules) item.id: item};
+      final merged = deduplicateMedicationRecords([
+        ...saved,
+        ..._localDoseResponses.entries
+            .where((e) => e.key.startsWith('$elderlyId:'))
+            .map((e) => e.value),
+      ]);
+      for (final record in merged) {
+        final medication = scheduleById[record.medicationId];
+        final aligned = medication == null || medication.timesPerDay != 1
+            ? record
+            : MedicationController.alignRecordToOccurrence(
+                record,
+                medication,
+                MedicationController.scheduledDateTime(
+                  medication,
+                  record.scheduledAt,
+                ),
+              );
+        await _updateNativeMedicationRecord(elderlyId, aligned);
+      }
+      final plan = medicationReminderPlan(
+        schedules: schedules,
+        records: merged,
+        now: DateTime.now(),
+      );
+      final desiredIds = {
+        for (final occurrence in plan)
+          medicationNotificationId(elderlyId, occurrence.alarmKey).toString(),
+      };
+      final preferences = await SharedPreferences.getInstance();
+      final owner = preferences.getString(_activeAlarmOwnerKey);
+      if (owner != null && owner != elderlyId) {
+        await _cancelMedicationRemindersInternal();
+      }
+      final previousIds = {
+        ...?preferences.getStringList(_scheduledAlarmIdsKey(elderlyId)),
+        ...?preferences.getStringList(_allAlarmIdsKey(elderlyId)),
+      };
+      for (final removedId in previousIds.difference(desiredIds)) {
+        final id = int.tryParse(removedId);
+        if (id == null) continue;
         _medicationForegroundTimers.remove(id)?.cancel();
         await _notifications.cancel(id: id);
         await _cancelNativeMedicationAlarm(id);
+        await _forgetMedicationAlarm(elderlyId, id);
       }
-    }
+      for (final occurrence in plan) {
+        await _scheduleMedicationOccurrence(elderlyId, occurrence);
+      }
+      await preferences.setStringList(
+        _scheduledAlarmIdsKey(elderlyId),
+        desiredIds.toList(),
+      );
+    });
+  }
 
-    final scheduleMode = await _medicationScheduleMode();
-    final ids = <String>[];
-    for (final medication in schedules.where(
-      (item) => item.hasAutomaticReminder,
-    )) {
-      final occurrences = _nextMedicationOccurrences(medication);
-      for (final scheduledDate in occurrences) {
-        final payload = _medicationPayload(
-          elderlyId,
-          medication,
-          scheduledDate,
-        );
-        final occurrenceKey = scheduledDate.millisecondsSinceEpoch.toString();
-        final id = medicationNotificationId(
-          elderlyId,
-          '${medication.id}_$occurrenceKey',
-        );
-        ids.add(id.toString());
-        await _rememberMedicationAlarm(elderlyId, id);
-        await _notifications.zonedSchedule(
-          id: id,
-          title: 'Time to take medicine',
-          body:
-              '${medication.name} • ${medication.doseSummary} • ${medication.instruction}',
-          scheduledDate: scheduledDate,
-          notificationDetails: _medicationNotificationDetails(),
-          androidScheduleMode: scheduleMode,
-          payload: payload,
-        );
-        await _scheduleNativeMedicationAlarm(
-          id: id,
-          scheduledDate: scheduledDate,
-          payload: payload,
-        );
-        _scheduleForegroundMedicationScreen(
-          id: id,
-          payload: payload,
-          hour: medication.hour,
-          minute: medication.minute,
-          scheduledDate: scheduledDate,
-          repeatDaily: false,
-        );
-      }
+  /// Apply a saved response immediately, before another screen or Firestore
+  /// listener has a chance to rebuild the rolling alarm schedule.
+  Future<void> applyMedicationRecord(
+    String elderlyId,
+    MedicationRecord record,
+  ) async {
+    if (!Platform.isAndroid ||
+        FirebaseAuth.instance.currentUser?.uid != elderlyId) {
+      return;
     }
-    await preferences.setStringList(storageKey, ids);
-    final allIds =
-        preferences.getStringList(_allAlarmIdsKey(elderlyId))?.toSet() ??
-        <String>{};
-    allIds.removeAll(previousIds);
-    allIds.addAll(ids);
-    await preferences.setStringList(
-      _allAlarmIdsKey(elderlyId),
-      allIds.toList()..sort(),
+    await initialize();
+    _localDoseResponses['$elderlyId:${record.key}'] = record;
+    for (final suffix in ['', '_snooze']) {
+      final id = medicationNotificationId(
+        elderlyId,
+        '${record.medicationId}_${record.scheduledAt.millisecondsSinceEpoch}$suffix',
+      );
+      _medicationForegroundTimers.remove(id)?.cancel();
+    }
+    // Persist cancellation before waiting behind any rolling schedule rebuild.
+    await _updateNativeMedicationRecord(elderlyId, record);
+    for (final suffix in ['', '_snooze']) {
+      final id = medicationNotificationId(
+        elderlyId,
+        '${record.medicationId}_${record.scheduledAt.millisecondsSinceEpoch}$suffix',
+      );
+      // Also stop the plugin fallback when native exact alarms were unavailable.
+      await _notifications.cancel(id: id);
+    }
+    final pending = MedicationNotificationTarget.fromPayload(
+      _pendingNotificationPayload,
+    );
+    if (pending?.elderlyId == elderlyId &&
+        pending?.medicationId == record.medicationId &&
+        pending?.scheduledAt == record.scheduledAt) {
+      _pendingNotificationPayload = null;
+    }
+    // The saved response and native guard are durable now. Cleanup can wait
+    // behind a resync without holding the alert screen's confirmation.
+    unawaited(
+      _queueAlarmWork(() async {
+        if (FirebaseAuth.instance.currentUser?.uid != elderlyId) return;
+        for (final suffix in ['', '_snooze']) {
+          final id = medicationNotificationId(
+            elderlyId,
+            '${record.medicationId}_${record.scheduledAt.millisecondsSinceEpoch}$suffix',
+          );
+          _medicationForegroundTimers.remove(id)?.cancel();
+          await _notifications.cancel(id: id);
+          await _cancelNativeMedicationAlarm(id);
+          await _forgetMedicationAlarm(elderlyId, id);
+        }
+        if (record.status == MedicationStatus.snoozed &&
+            record.snoozedUntil?.isAfter(DateTime.now()) == true &&
+            record.scheduleSnapshot != null) {
+          await _scheduleMedicationOccurrence(
+            elderlyId,
+            MedicationReminderOccurrence(
+              record.scheduleSnapshot!,
+              record.scheduledAt,
+              record.snoozedUntil!,
+              snoozed: true,
+            ),
+          );
+        }
+      }),
     );
   }
 
+  // Save the dose response on Android before other alarm work can run.
+  Future<void> _updateNativeMedicationRecord(
+    String elderlyId,
+    MedicationRecord record,
+  ) async {
+    await _alarmPermissionChannel.invokeMethod<void>('updateMedicationRecord', {
+      'elderlyId': elderlyId,
+      'medicationId': record.medicationId,
+      'occurrenceId': record.key,
+      'scheduledAt': record.scheduledAt.millisecondsSinceEpoch,
+      'status': record.status.name,
+      'actionAt': record.actionAt?.millisecondsSinceEpoch ?? 0,
+      'remindAt': record.snoozedUntil?.millisecondsSinceEpoch ?? 0,
+    });
+  }
+
+  // Schedule this dose only if its alarm details have changed.
+  Future<void> _scheduleMedicationOccurrence(
+    String elderlyId,
+    MedicationReminderOccurrence occurrence,
+  ) async {
+    if (FirebaseAuth.instance.currentUser?.uid != elderlyId) return;
+    final medication = occurrence.medication;
+    final id = medicationNotificationId(elderlyId, occurrence.alarmKey);
+    final scheduledDate = tz.TZDateTime.from(occurrence.remindAt, tz.local);
+    if (!scheduledDate.isAfter(tz.TZDateTime.now(tz.local))) return;
+    final payload = _medicationPayload(
+      elderlyId,
+      medication,
+      occurrence.scheduledAt,
+      reminderAt: occurrence.snoozed ? occurrence.remindAt : null,
+    );
+    final specification = '${scheduledDate.millisecondsSinceEpoch}:$payload';
+    final installed = _scheduledMedicationSpecs.putIfAbsent(
+      elderlyId,
+      () => {},
+    );
+    if (installed[id] == specification) return;
+    await _rememberMedicationAlarm(elderlyId, id);
+    final preferences = await SharedPreferences.getInstance();
+    final ids =
+        preferences.getStringList(_scheduledAlarmIdsKey(elderlyId))?.toSet() ??
+        <String>{};
+    ids.add(id.toString());
+    await preferences.setStringList(
+      _scheduledAlarmIdsKey(elderlyId),
+      ids.toList(),
+    );
+    final nativeScheduled = await _scheduleNativeMedicationAlarm(
+      id: id,
+      scheduledDate: scheduledDate,
+      payload: payload,
+    );
+    if (nativeScheduled) {
+      installed[id] = specification;
+    } else {
+      await _notifications.zonedSchedule(
+        id: id,
+        title: 'Time to take medicine',
+        body:
+            '${medication.name} • ${medication.doseSummary} • ${medication.instruction}',
+        scheduledDate: scheduledDate,
+        notificationDetails: _medicationNotificationDetails(),
+        androidScheduleMode: await _medicationScheduleMode(),
+        payload: payload,
+      );
+    }
+    if (!nativeScheduled) {
+      _scheduleForegroundMedicationScreen(
+        id: id,
+        payload: payload,
+        hour: medication.hour,
+        minute: medication.minute,
+        scheduledDate: scheduledDate,
+        repeatDaily: false,
+      );
+    }
+  }
+
+  // Use an in-app timer when the native alarm could not be scheduled.
   void _scheduleForegroundMedicationScreen({
     required int id,
     required String payload,
@@ -550,52 +740,25 @@ class PushNotificationService {
     );
   }
 
+  // Apply the snoozed record through the same alarm update path.
   Future<void> snoozeMedicationReminder({
     required String elderlyId,
     required MedicationSchedule medication,
     required DateTime scheduledAt,
     Duration duration = const Duration(minutes: 10),
-  }) async {
-    if (!Platform.isAndroid) return;
-    await initialize();
-    if (FirebaseAuth.instance.currentUser?.uid != elderlyId) return;
-    final id = medicationNotificationId(
-      elderlyId,
-      '${medication.id}_${scheduledAt.millisecondsSinceEpoch}_snooze',
-    );
-    final scheduledDate = tz.TZDateTime.now(tz.local).add(duration);
-    final payload = _medicationPayload(
-      elderlyId,
-      medication,
-      scheduledAt,
-      reminderAt: scheduledDate,
-    );
-    await _notifications.zonedSchedule(
-      id: id,
-      title: 'Medication reminder',
-      body:
-          '${medication.name} • ${medication.doseSummary} • ${medication.instruction}',
-      scheduledDate: scheduledDate,
-      notificationDetails: _medicationNotificationDetails(),
-      androidScheduleMode: await _medicationScheduleMode(),
-      payload: payload,
-    );
-    await _scheduleNativeMedicationAlarm(
-      id: id,
-      scheduledDate: scheduledDate,
-      payload: payload,
-    );
-    await _rememberMedicationAlarm(elderlyId, id);
-    _scheduleForegroundMedicationScreen(
-      id: id,
-      payload: payload,
-      hour: medication.hour,
-      minute: medication.minute,
-      scheduledDate: scheduledDate,
-      repeatDaily: false,
-    );
-  }
+  }) => applyMedicationRecord(
+    elderlyId,
+    MedicationRecord(
+      medicationId: medication.id,
+      scheduledAt: scheduledAt,
+      status: MedicationStatus.snoozed,
+      actionAt: DateTime.now(),
+      snoozedUntil: DateTime.now().add(duration),
+      scheduleSnapshot: medication,
+    ),
+  );
 
+  // Schedule a short test so the user can check the alarm setup.
   Future<void> showMedicationTestAlarm({
     required String elderlyId,
     required MedicationSchedule medication,
@@ -616,6 +779,7 @@ class PushNotificationService {
     );
   }
 
+  // Remove the pending test alarm and its foreground timer.
   Future<void> cancelMedicationTestAlarm({
     required String elderlyId,
     required MedicationSchedule medication,
@@ -630,6 +794,7 @@ class PushNotificationService {
     );
   }
 
+  // Use exact alarms when allowed and fall back when permission is missing.
   Future<AndroidScheduleMode> _medicationScheduleMode() async {
     final android = _notifications
         .resolvePlatformSpecificImplementation<
@@ -641,12 +806,13 @@ class PushNotificationService {
         : AndroidScheduleMode.exactAllowWhileIdle;
   }
 
-  Future<void> _scheduleNativeMedicationAlarm({
+  // Ask Android to schedule a medicine alarm that can work outside Flutter.
+  Future<bool> _scheduleNativeMedicationAlarm({
     required int id,
     required DateTime scheduledDate,
     required String payload,
   }) async {
-    if (!Platform.isAndroid) return;
+    if (!Platform.isAndroid) return false;
     try {
       final scheduled = await _alarmPermissionChannel
           .invokeMethod<bool>('scheduleMedicationAlarm', <String, Object>{
@@ -657,12 +823,18 @@ class PushNotificationService {
       if (scheduled != true) {
         debugPrint('Android could not schedule full-screen alarm $id.');
       }
+      return scheduled == true;
     } on PlatformException catch (error) {
       debugPrint('Native full-screen alarm $id was not scheduled: $error');
+      return false;
     }
   }
 
+  // Remove the native alarm and its cached schedule details.
   Future<void> _cancelNativeMedicationAlarm(int id) async {
+    for (final installed in _scheduledMedicationSpecs.values) {
+      installed.remove(id);
+    }
     if (!Platform.isAndroid) return;
     try {
       await _alarmPermissionChannel.invokeMethod<void>(
@@ -674,6 +846,7 @@ class PushNotificationService {
     }
   }
 
+  // Use the medicine alarm channel with sound, vibration and the alert screen.
   NotificationDetails _medicationNotificationDetails({
     bool fullScreen = true,
     bool insistent = false,
@@ -700,6 +873,7 @@ class PushNotificationService {
     ),
   );
 
+  // Find the next occurrence of the requested reminder time.
   tz.TZDateTime _nextMedicationTime(int hour, int minute) {
     final now = tz.TZDateTime.now(tz.local);
     var scheduled = tz.TZDateTime(
@@ -716,48 +890,7 @@ class PushNotificationService {
     return scheduled;
   }
 
-  List<tz.TZDateTime> _nextMedicationOccurrences(
-    MedicationSchedule medication, {
-    int limit = 64,
-  }) {
-    final now = tz.TZDateTime.now(tz.local);
-    final today = DateTime(now.year, now.month, now.day);
-    final start = medication.startDate == null
-        ? today
-        : MedicationController.dateOnly(medication.startDate!);
-    var date = start.isAfter(today) ? start : today;
-    final end = medication.endDate == null
-        ? null
-        : MedicationController.dateOnly(medication.endDate!);
-    final occurrences = <tz.TZDateTime>[];
-
-    // Schedule a rolling set of future alarms. The set is refreshed whenever
-    // the elderly opens the app or the caregiver changes a schedule.
-    for (
-      var checked = 0;
-      checked < 3660 && occurrences.length < limit;
-      checked++
-    ) {
-      if (end != null && date.isAfter(end)) break;
-      if (medication.isScheduledOn(date)) {
-        for (final minutes in medication.dailyReminderMinutes) {
-          final occurrence = tz.TZDateTime(
-            tz.local,
-            date.year,
-            date.month,
-            date.day,
-            minutes ~/ 60,
-            minutes % 60,
-          );
-          if (occurrence.isAfter(now)) occurrences.add(occurrence);
-          if (occurrences.length >= limit) break;
-        }
-      }
-      date = date.add(const Duration(days: 1));
-    }
-    return occurrences;
-  }
-
+  // Attach the account, medicine snapshot and original dose time to the alarm.
   String _medicationPayload(
     String elderlyId,
     MedicationSchedule medication,
@@ -769,8 +902,10 @@ class PushNotificationService {
     scheduledAt: scheduledAt,
     reminderAt: reminderAt,
     medicationSnapshot: medication,
+    occurrenceId: MedicationController.recordKeyFor(medication, scheduledAt),
   ).toPayload();
 
+  // Make the same notification ID each time for a given account and alarm.
   @visibleForTesting
   static int medicationNotificationId(String elderlyId, String medicationId) {
     final bytes = sha256.convert('$elderlyId:$medicationId'.codeUnits).bytes;
@@ -778,6 +913,7 @@ class PushNotificationService {
         0x7fffffff;
   }
 
+  // Register this caregiver phone's push token and follow token changes.
   Future<bool> registerCaregiver(String caregiverId) async {
     try {
       await initialize();
@@ -819,6 +955,7 @@ class PushNotificationService {
     }
   }
 
+  // Remove this phone's caregiver push registration at sign-out.
   Future<void> unregisterCaregiver() async {
     final caregiverId = _caregiverId ?? FirebaseAuth.instance.currentUser?.uid;
     final token = _registeredToken ?? await _messaging.getToken();
@@ -832,6 +969,7 @@ class PushNotificationService {
     await _messaging.deleteToken();
   }
 
+  // Save the current device token under the caregiver account.
   Future<void> _saveToken(String caregiverId, String token) async {
     await FirebaseFirestore.instance
         .collection('caregiver_profiles')
@@ -846,6 +984,7 @@ class PushNotificationService {
         }, SetOptions(merge: true));
   }
 
+  // Delete the saved device token for this installation.
   Future<void> _deleteToken(String caregiverId, String token) async {
     try {
       await FirebaseFirestore.instance
@@ -859,6 +998,7 @@ class PushNotificationService {
     }
   }
 
+  // Show a local notification when a push arrives while the app is open.
   Future<void> _showForegroundNotification(RemoteMessage message) async {
     final notification = message.notification;
     if (notification == null) return;
@@ -888,6 +1028,7 @@ class PushNotificationService {
     );
   }
 
+  // Hash the push token to make its Firestore document ID.
   String _tokenDocumentId(String token) =>
       sha256.convert(token.codeUnits).toString();
 }

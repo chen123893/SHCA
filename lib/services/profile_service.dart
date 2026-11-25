@@ -19,6 +19,7 @@ class ElderlyProfile {
   final String emergencyPhone;
   final String medicalCondition;
 
+  // Prepare the profile values to save in Firestore.
   Map<String, dynamic> toFirestore() => <String, dynamic>{
     'userId': userId,
     'fullName': fullName,
@@ -32,6 +33,7 @@ class ElderlyProfile {
     'medicalCondition': medicalCondition,
   };
 
+  // Read the saved profile, keeping defaults for missing fields.
   factory ElderlyProfile.fromFirestore(
     String userId,
     Map<String, dynamic> data,
@@ -64,6 +66,7 @@ class CaregiverProfile {
   final bool smsAlert;
   final bool medicationEmailAlert;
 
+  // Prepare the profile values to save in Firestore.
   Map<String, dynamic> toFirestore() => <String, dynamic>{
     'userId': userId,
     'alertPreferences': <String, dynamic>{
@@ -73,6 +76,7 @@ class CaregiverProfile {
     },
   };
 
+  // Read the saved profile, keeping defaults for missing fields.
   factory CaregiverProfile.fromFirestore(
     String userId,
     Map<String, dynamic> data,
@@ -109,15 +113,19 @@ class FirestoreProfileRepository implements ProfileRepository {
 
   final FirebaseFirestore _firestore;
 
+  // Use the users collection for these database operations.
   CollectionReference<Map<String, dynamic>> get _users =>
       _firestore.collection('users');
 
+  // Use the elderly_profiles collection for these database operations.
   CollectionReference<Map<String, dynamic>> get _elderlyProfiles =>
       _firestore.collection('elderly_profiles');
 
+  // Use the caregiver_profiles collection for these database operations.
   CollectionReference<Map<String, dynamic>> get _caregiverProfiles =>
       _firestore.collection('caregiver_profiles');
 
+  // Save the elderly profile together with the account's basic details.
   @override
   Future<void> saveElderlyProfile(ElderlyProfile profile) async {
     await _elderlyProfiles.doc(profile.userId).set(<String, dynamic>{
@@ -126,6 +134,7 @@ class FirestoreProfileRepository implements ProfileRepository {
     }, SetOptions(merge: true));
   }
 
+  // Save caregiver contact details and notification settings.
   @override
   Future<void> saveCaregiverProfile(CaregiverProfile profile) async {
     await _caregiverProfiles.doc(profile.userId).set(<String, dynamic>{
@@ -134,6 +143,7 @@ class FirestoreProfileRepository implements ProfileRepository {
     }, SetOptions(merge: true));
   }
 
+  // Load the elderly profile and fall back to existing account details.
   @override
   Future<ElderlyProfile?> loadElderlyProfile(String userId) async {
     final profile = await _elderlyProfiles.doc(userId).get();
@@ -158,6 +168,7 @@ class FirestoreProfileRepository implements ProfileRepository {
     }
   }
 
+  // Load the caregiver's profile and contact settings.
   @override
   Future<CaregiverProfile?> loadCaregiverProfile(String userId) async {
     final profile = await _caregiverProfiles.doc(userId).get();
@@ -177,6 +188,7 @@ class FirestoreProfileRepository implements ProfileRepository {
     return migrated;
   }
 
+  // Check whether an older account already contains profile details.
   bool _hasElderlyProfileData(Map<String, dynamic> data) =>
       data.containsKey('dateOfBirth') ||
       data.containsKey('gender') ||

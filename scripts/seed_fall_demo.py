@@ -11,6 +11,7 @@ from seed_medication_demo import Firestore, encode, fingerprint, scalar
 ZONE = ZoneInfo('Asia/Kuala_Lumpur')
 
 
+# Prepare and optionally save the demo fall events requested by the script options.
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--project', required=True)

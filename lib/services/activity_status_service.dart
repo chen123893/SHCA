@@ -15,6 +15,7 @@ class ActivityStatusService {
   final Map<String, DateTime> _lastSent = <String, DateTime>{};
   final Map<String, String> _lastSignature = <String, String>{};
 
+  // Prepare the phone activity result for the caregiver status page.
   Future<void> publishPhone(ActivitySnapshot snapshot) => _publish(
     source: 'phone',
     label: snapshot.label,
@@ -25,6 +26,7 @@ class ActivityStatusService {
     measuredAt: snapshot.updatedAt,
   );
 
+  // Prepare the watch activity result for the caregiver status page.
   Future<void> publishWatch(WearableStatus status) => _publish(
     source: 'watch',
     label: status.label,
@@ -35,6 +37,7 @@ class ActivityStatusService {
     measuredAt: status.updatedAt,
   );
 
+  // Save activity status to Firestore without repeating unchanged updates too often.
   Future<void> _publish({
     required String source,
     required String label,

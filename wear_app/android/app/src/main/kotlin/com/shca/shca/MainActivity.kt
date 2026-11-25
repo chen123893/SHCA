@@ -19,6 +19,7 @@ class MainActivity : FlutterActivity() {
     private var locationChannel: EmergencyLocationChannel? = null
     private var credentialResult: MethodChannel.Result? = null
     private var pendingLaunchEvent: Map<String, Any?>? = null
+    // Prepare watch permissions and capture the action that opened the app.
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         pendingLaunchEvent = launchEvent(intent)
@@ -29,31 +30,37 @@ class MainActivity : FlutterActivity() {
         MedicationScheduler.restore(this)
         handleFallPreview(intent)
     }
+    // Detach the watch activity's event handlers.
     override fun onDestroy() {
         setupScreenHandler.removeCallbacks(releaseSetupScreen)
         credentialResult?.success(null)
         credentialResult = null
         super.onDestroy()
     }
+    // Mark Flutter as visible and refresh native watch monitoring.
     override fun onResume() {
         super.onResume()
         WatchMonitoringService.setFlutterVisible(true)
         MedicationScheduler.restore(this)
         WatchCloud.refreshIfNeeded(this)
     }
+    // Tell the native monitor that the Flutter watch screen is no longer visible.
     override fun onPause() {
         WatchMonitoringService.setFlutterVisible(false)
         super.onPause()
     }
+    // Request the watch notification permission when this Android version needs it.
     private fun requestNotifications() {
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 9301)
     }
+    // Handle a medicine, fall or sign-in intent delivered to the existing watch activity.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent); setIntent(intent)
         launchEvent(intent)?.let { if (WatchEventBus.sink == null) pendingLaunchEvent = it else WatchEventBus.emit(it) }
         handleFallPreview(intent)
     }
+    // Open the local watch fall-warning preview for a debug request.
     private fun handleFallPreview(intent: Intent?) {
         if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE == 0) return
         if (intent?.action != "com.shca.shca.PREVIEW_FALL_CONFIRMATION") return
@@ -61,17 +68,21 @@ class MainActivity : FlutterActivity() {
             WatchFallConfirmation.begin(this, preview = true)
         }, 3000)
     }
+    // Return the requested watch permission result to the waiting call.
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         locationChannel?.permissionResult(requestCode)
     }
 
+    // Connect Flutter calls to native watch session, alarms and emergency actions.
     override fun configureFlutterEngine(engine: FlutterEngine) {
         super.configureFlutterEngine(engine)
         val messenger = engine.dartExecutor.binaryMessenger
         locationChannel = EmergencyLocationChannel(this, messenger) { WatchSession.userId(this) }
         EventChannel(messenger, EVENT_CHANNEL).setStreamHandler(object : EventChannel.StreamHandler {
+            // Attach Flutter to native watch events.
             override fun onListen(arguments: Any?, events: EventChannel.EventSink?) { WatchEventBus.sink = events }
+            // Detach the Flutter watch event listener.
             override fun onCancel(arguments: Any?) { WatchEventBus.sink = null }
         })
         MethodChannel(messenger, METHOD_CHANNEL).setMethodCallHandler { call, result ->
@@ -134,6 +145,7 @@ class MainActivity : FlutterActivity() {
             }
         }
     }
+    // Return the current account, connection, permissions and medicine list to Flutter.
     private fun getInitialState(result: MethodChannel.Result) {
         WatchCloud.refreshIfNeeded(this)
         // Read already-synced data too: an app installed after the last phone
@@ -161,6 +173,7 @@ class MainActivity : FlutterActivity() {
             }
         }
     }
+    // Pass the latest Flutter movement result into the native watch status flow.
     private fun publishStatus(v: Map<String, Any?>, result: MethodChannel.Result) {
         WatchCloud.publishActivity(this, v)
         val identity = WatchDeviceIdentity.getOrCreate(this)
@@ -175,6 +188,7 @@ class MainActivity : FlutterActivity() {
         }.asPutDataRequest().setUrgent()
         Wearable.getDataClient(this).putDataItem(request).addOnSuccessListener { result.success(true) }.addOnFailureListener { result.success(false) }
     }
+    // Send the requested watch action through the phone or cloud path.
     private fun sendAction(v: Map<String, Any?>, medicine: Boolean, result: MethodChannel.Result) {
         val p = getSharedPreferences("shca_watch_bridge_v2", MODE_PRIVATE)
         val standalone = WatchSession.isSignedIn(this)
@@ -231,6 +245,7 @@ class MainActivity : FlutterActivity() {
             nodes.forEach { Wearable.getMessageClient(this).sendMessage(it.id, path, json.toString().toByteArray()) }
         }
     }
+    // Open the native watch text editor for the chosen sign-in field.
     private fun editCredential(v: Map<String, Any?>, result: MethodChannel.Result) {
         if (credentialResult != null) { result.error("input-busy", "Finish the current field first.", null); return }
         val field = v["field"] as? String
@@ -245,6 +260,7 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    // Return the edited watch credential to the waiting Flutter request.
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == 9402) {
@@ -254,6 +270,7 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    // Run the native cloud sign-in and return its result to Flutter.
     private fun signIn(v: Map<String, Any?>, result: MethodChannel.Result) {
         val email = v["email"] as? String ?: ""
         val password = v["password"] as? String ?: ""
@@ -263,11 +280,13 @@ class MainActivity : FlutterActivity() {
         }
         WatchCloud.signIn(this, email, password) { response -> result.success(response) }
     }
+    // Turn the activity's opening intent into a Flutter watch event.
     private fun launchEvent(intent: Intent?): Map<String, Any?>? =
         if (intent?.action == ACTION_SHOW_MEDICATION) {
             val medication = MedicationStore.find(this, intent.getStringExtra("occurrenceId") ?: "") ?: MedicationStore.active(this)
             if (medication != null && medication.status != "taken") mapOf("type" to "show_medication", "medication" to medication.toMap()) else null
         } else null
+    // Convert the native channel arguments into a string-keyed map.
     private fun Any?.asStringMap(): Map<String, Any?> {
         @Suppress("UNCHECKED_CAST")
         return this as? Map<String, Any?> ?: emptyMap()
@@ -290,5 +309,6 @@ object Paths {
 }
 object WatchEventBus {
     var sink: EventChannel.EventSink? = null
+    // Send one native watch event to Flutter on the UI thread.
     fun emit(event: Map<String, Any?>) { Handler(Looper.getMainLooper()).post { sink?.success(event) } }
 }

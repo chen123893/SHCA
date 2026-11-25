@@ -22,6 +22,7 @@ class ElderlyLinkReadyScreen extends StatelessWidget {
   final String pairingCode;
   final String emergencyPhone;
 
+  // Copy the elderly account's pairing code to the clipboard.
   Future<void> _copyCode(BuildContext context) async {
     await Clipboard.setData(ClipboardData(text: pairingCode));
     if (!context.mounted) return;
@@ -30,6 +31,7 @@ class ElderlyLinkReadyScreen extends StatelessWidget {
     ).showSnackBar(const SnackBar(content: Text('Elderly link code copied.')));
   }
 
+  // Show the pairing code after the elderly account setup is complete.
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -193,6 +195,7 @@ class LinkElderlyScreen extends StatefulWidget {
   final String initialRelationship;
   final LinkedElderly? initialLinkedElderly;
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<LinkElderlyScreen> createState() => _LinkElderlyScreenState();
 }
@@ -205,6 +208,7 @@ class _LinkElderlyScreenState extends State<LinkElderlyScreen> {
   bool _submitting = false;
   LinkedElderly? _linkedElderly;
 
+  // Prepare the account-linking form and its input fields.
   @override
   void initState() {
     super.initState();
@@ -215,6 +219,7 @@ class _LinkElderlyScreenState extends State<LinkElderlyScreen> {
     _linkedElderly = widget.initialLinkedElderly;
   }
 
+  // release the controllers when this page is removed.
   @override
   void dispose() {
     _codeOrEmailController.dispose();
@@ -222,6 +227,7 @@ class _LinkElderlyScreenState extends State<LinkElderlyScreen> {
     super.dispose();
   }
 
+  // Validate the link details and add the elderly account to this caregiver.
   Future<void> _link() async {
     if (!_formKey.currentState!.validate()) return;
     final caregiverId =
@@ -249,6 +255,7 @@ class _LinkElderlyScreenState extends State<LinkElderlyScreen> {
     }
   }
 
+  // Show the error without leaving the current screen.
   void _showError(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -256,11 +263,13 @@ class _LinkElderlyScreenState extends State<LinkElderlyScreen> {
     );
   }
 
+  // Reset the form so another elderly account can be linked.
   void _linkAnother() {
     _codeOrEmailController.clear();
     setState(() => _linkedElderly = null);
   }
 
+  // Show the account linking form or the successful link result.
   @override
   Widget build(BuildContext context) {
     final result = _linkedElderly;
@@ -279,6 +288,7 @@ class _LinkElderlyScreenState extends State<LinkElderlyScreen> {
     );
   }
 
+  // Show the pairing details and caregiver relationship fields.
   Widget _buildLinkForm() {
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 30),
@@ -400,6 +410,7 @@ class _LinkElderlyScreenState extends State<LinkElderlyScreen> {
     );
   }
 
+  // Show the linked elderly account and the next available actions.
   Widget _buildSuccess(LinkedElderly elderly) {
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 28, 24, 30),
@@ -519,6 +530,7 @@ class _LinkElderlyScreenState extends State<LinkElderlyScreen> {
     );
   }
 
+  // Keep the form fields styled the same way.
   InputDecoration _inputDecoration({
     required String label,
     required String hint,
@@ -553,6 +565,7 @@ class _InformationRow extends StatelessWidget {
   final String value;
   final Widget? trailing;
 
+  // Show one saved detail beside its label.
   @override
   Widget build(BuildContext context) {
     return Row(

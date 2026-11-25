@@ -7,6 +7,7 @@ export interface EmergencyLocation {
   kind: "current" | "last_known";
 }
 
+// Accept only valid location coordinates, source and timestamp values.
 export function parseEmergencyLocation(value: unknown, referenceTime: number): EmergencyLocation | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return;
   const v = value as Record<string, unknown>;
@@ -21,9 +22,11 @@ export function parseEmergencyLocation(value: unknown, referenceTime: number): E
   return { latitude, longitude, recordedAt, accuracyMeters, source, kind };
 }
 
+// Read the location values stored in a Firestore alert document.
 export function locationFromFirestore(value: any, referenceTime: number): EmergencyLocation | undefined {
   const fields = value?.mapValue?.fields;
   if (!fields) return;
+  // Read a finite number without accepting other value types.
   const numeric = (key: string) => Number(fields[key]?.doubleValue ?? fields[key]?.integerValue ?? NaN);
   return parseEmergencyLocation({
     latitude: numeric("latitude"), longitude: numeric("longitude"),
@@ -32,10 +35,12 @@ export function locationFromFirestore(value: any, referenceTime: number): Emerge
   }, referenceTime);
 }
 
+// Build a Maps search link from the saved latitude and longitude.
 export function locationMapsUrl(location: EmergencyLocation): string {
   return `https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}`;
 }
 
+// Describe the location source, age and available accuracy for the alert.
 export function locationDescription(location: EmergencyLocation): string {
   const time = new Date(location.recordedAt).toLocaleString("en-MY", { timeZone: "Asia/Kuala_Lumpur" });
   return `${location.kind === "last_known" ? "Last known location" : "Recorded location"} from the ${location.source}, ${time} (Malaysia time), accuracy about ${Math.round(location.accuracyMeters)} m.`;

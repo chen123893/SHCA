@@ -13,6 +13,7 @@ class ConnectWatchScreen extends StatefulWidget {
   final String accountName;
   final Future<void> Function(String code)? connect;
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<ConnectWatchScreen> createState() => _ConnectWatchScreenState();
 }
@@ -22,6 +23,7 @@ class _ConnectWatchScreenState extends State<ConnectWatchScreen> {
   bool _busy = false, _done = false;
   String? _error;
 
+  // Approve the watch sign-in using the phone's current account.
   Future<void> _connect() async {
     if (_busy) return;
     final code = _code.text.trim();
@@ -52,12 +54,14 @@ class _ConnectWatchScreenState extends State<ConnectWatchScreen> {
     }
   }
 
+  // release the controllers when this page is removed.
   @override
   void dispose() {
     _code.dispose();
     super.dispose();
   }
 
+  // Show the watch sign-in approval state on the phone.
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(

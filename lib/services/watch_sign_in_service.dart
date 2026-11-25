@@ -12,6 +12,7 @@ class WatchSignInService {
         'https://shca-medication-images.shca-medication-images.workers.dev',
   );
 
+  // Use the signed-in phone account to approve the watch sign-in request.
   Future<void> connect(String code) async {
     if (!RegExp(r'^\d{6}$').hasMatch(code)) {
       throw StateError('Enter the six-digit code shown on your watch.');

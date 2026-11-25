@@ -5,6 +5,7 @@ class AlertVibrationService {
 
   static const MethodChannel _channel = MethodChannel('com.shca.shca/wearable');
 
+  // Ask Android to start the fall warning sound and vibration.
   static Future<void> startFall({
     Duration duration = const Duration(seconds: 30),
   }) async {
@@ -19,6 +20,7 @@ class AlertVibrationService {
     }
   }
 
+  // Stop the fall warning feedback if the native feature is available.
   static Future<void> stop() async {
     try {
       await _channel.invokeMethod<void>('stopFallAlert');

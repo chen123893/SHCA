@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'medication_service.dart';
+import 'push_notification_service.dart';
 
 /// Sync is scoped to the signed-in elderly account and survives page navigation.
 class WatchScheduleSync {
@@ -25,6 +26,7 @@ class WatchScheduleSync {
   List<MedicationSchedule> _items = [];
   List<MedicationRecord> _doses = [];
 
+  // Watch the signed-in account so medicine data stays in sync.
   void start() {
     if (!Platform.isAndroid || _auth != null) return;
     _auth = FirebaseAuth.instance.authStateChanges().listen(_onUser);
@@ -34,6 +36,7 @@ class WatchScheduleSync {
     );
   }
 
+  // Cancel the account, profile and medication listeners.
   Future<void> stop() async {
     _timer?.cancel();
     _timer = null;
@@ -45,6 +48,7 @@ class WatchScheduleSync {
     _auth = null;
   }
 
+  // Switch the listeners to the current elderly account.
   Future<void> _onUser(User? user) async {
     final generation = ++_generation;
     await _profile?.cancel();
@@ -123,6 +127,7 @@ class WatchScheduleSync {
         });
   }
 
+  // Update phone alarms and send the current dose list to the watch.
   Future<void> _publish({bool forceClear = false}) async {
     final uid = _uid, role = _role;
     try {
@@ -142,6 +147,14 @@ class WatchScheduleSync {
       final json = jsonEncode(rows);
       final signature = '$uid:$role:${now.year}-${now.month}-${now.day}:$json';
       if (!forceClear && signature == _signature) return;
+      if (!forceClear && role == 'elderly') {
+        await PushNotificationService.instance.syncMedicationReminders(
+          elderlyId: uid,
+          schedules: List.of(_items),
+          records: List.of(_doses),
+        );
+      }
+      if (_uid != uid || _role != role) return;
       await _methods.invokeMethod<void>('syncMedication', {
         'userId': role == 'elderly' ? uid : '',
         'scheduleJson': json,

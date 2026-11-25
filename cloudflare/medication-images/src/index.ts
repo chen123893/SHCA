@@ -42,6 +42,7 @@ const maxImageBytes = 5 * 1024 * 1024;
 const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 export default {
+  // Route the request to the matching image, medication, watch or emergency handler.
   async fetch(request: Request, env: Env): Promise<Response> {
     try {
       if (request.method === "OPTIONS") return corsResponse(request, env);
@@ -103,6 +104,7 @@ export default {
   },
 };
 
+// Check the missed dose and linked caregivers before requesting its email alerts.
 export async function sendMedicationReminderEmail(
   request: Request,
   env: Env,
@@ -240,6 +242,7 @@ export async function sendMedicationReminderEmail(
   }, 200, request, env);
 }
 
+// Check the medicine's saved stock before requesting caregiver emails.
 async function sendLowStockEmail(
   request: Request,
   env: Env,
@@ -360,6 +363,7 @@ async function sendLowStockEmail(
   }, 200, request, env);
 }
 
+// Find the caregiver links belonging to this elderly account.
 async function linkedCaregiverDocuments(
   elderlyId: string,
   token: string,
@@ -407,6 +411,7 @@ async function linkedCaregiverDocuments(
   return rows.flatMap((row) => row.document ? [row.document] : []);
 }
 
+// Read one Firestore document using the backend access token.
 async function firestoreDocument(
   path: string,
   token: string,
@@ -426,10 +431,12 @@ async function firestoreDocument(
   return await response.json() as FirestoreDocument;
 }
 
+// Build the Firestore document URL for the configured project.
 function firestoreBase(env: Env): string {
   return `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(env.FIREBASE_PROJECT_ID)}/databases/(default)`;
 }
 
+// Send the missed-dose details using the email provider.
 async function sendBrevoMissedMedicationEmail(
   env: Env,
   values: {
@@ -482,6 +489,7 @@ async function sendBrevoMissedMedicationEmail(
   }
 }
 
+// Send the remaining-stock details using the email provider.
 async function sendBrevoLowStockEmail(
   env: Env,
   values: {
@@ -533,6 +541,7 @@ async function sendBrevoLowStockEmail(
   }
 }
 
+// Read the useful error details from a rejected email request.
 async function brevoRequestError(
   response: Response,
   reminderType: string,
@@ -571,6 +580,7 @@ async function brevoRequestError(
   );
 }
 
+// Read a numeric field from Firestore's REST value format.
 function numericValue(
   value: FirestoreValue | undefined,
   fallback: number,
@@ -579,6 +589,7 @@ function numericValue(
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+// Combine the saved quantity, form and strength for the email.
 function medicationDoseSummary(
   fields: Record<string, FirestoreValue> | undefined,
 ): string {
@@ -598,6 +609,7 @@ function medicationDoseSummary(
     : `${rawDose} • ${quantityLabel}`;
 }
 
+// Format the saved reminder time for the caregiver email.
 function formatTime(hour: number, minute: number): string {
   const normalizedHour = ((hour % 24) + 24) % 24;
   const suffix = normalizedHour < 12 ? "AM" : "PM";
@@ -605,11 +617,13 @@ function formatTime(hour: number, minute: number): string {
   return `${displayHour}:${Math.max(0, Math.min(59, minute)).toString().padStart(2, "0")} ${suffix}`;
 }
 
+// Use the fallback when a saved text field is blank.
 function safeText(value: string | undefined, fallback: string): string {
   const trimmed = value?.trim() ?? "";
   return trimmed.length > 0 && trimmed.length <= 200 ? trimmed : fallback;
 }
 
+// Escape saved text before adding it to the email HTML.
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => ({
     "&": "&amp;",
@@ -620,6 +634,7 @@ function escapeHtml(value: string): string {
   })[character] ?? character);
 }
 
+// Hash the input into a stable hexadecimal string.
 async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest(
     "SHA-256",
@@ -630,6 +645,7 @@ async function sha256Hex(value: string): Promise<string> {
     .join("");
 }
 
+// Make a repeatable request ID so delivery retries can be recognised.
 async function deterministicUuid(value: string): Promise<string> {
   const characters = (await sha256Hex(value)).slice(0, 32).split("");
   // UUID version 5 and RFC 4122 variant bits. The digest keeps the value
@@ -642,6 +658,7 @@ async function deterministicUuid(value: string): Promise<string> {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+// Check access and save the medicine photo in private object storage.
 async function uploadImage(
   request: Request,
   env: Env,
@@ -689,6 +706,7 @@ async function uploadImage(
   return json({ imageKey }, 201, request, env);
 }
 
+// Serve the private medicine photo only to an authorised account.
 async function readImage(
   request: Request,
   env: Env,
@@ -722,6 +740,7 @@ async function readImage(
   return new Response(object.body, { headers });
 }
 
+// Remove a private medicine photo after checking the caller's access.
 async function deleteImage(
   request: Request,
   env: Env,
@@ -748,6 +767,7 @@ async function deleteImage(
   return json({ deleted: true }, 200, request, env);
 }
 
+// Verify the Firebase bearer token and read the caller's account ID.
 async function authenticate(
   request: Request,
   env: Env,
@@ -773,6 +793,7 @@ async function authenticate(
   }
 }
 
+// Check that the caregiver has an active link to this elderly account.
 async function caregiverIsLinked(
   caregiverId: string,
   elderlyId: string,
@@ -797,6 +818,7 @@ async function caregiverIsLinked(
   );
 }
 
+// Reject missing or unsafe IDs before using them in a storage path.
 function requiredIdentifier(
   value: unknown,
   name: string,
@@ -807,6 +829,7 @@ function requiredIdentifier(
   return value;
 }
 
+// Return a JSON body with the requested HTTP status.
 function json(
   value: unknown,
   status: number,
@@ -819,6 +842,7 @@ function json(
   return new Response(JSON.stringify(value), { status, headers });
 }
 
+// Answer the browser's cross-origin preflight request.
 function corsResponse(request: Request, env: Env): Response {
   const headers = corsHeaders(request, env);
   headers.set("access-control-allow-methods", "GET, POST, DELETE, OPTIONS");
@@ -827,6 +851,7 @@ function corsResponse(request: Request, env: Env): Response {
   return new Response(null, { status: 204, headers });
 }
 
+// Use the allowed cross-origin request headers for the API response.
 function corsHeaders(request: Request, env: Env): Headers {
   const headers = new Headers();
   const origin = request.headers.get("origin");

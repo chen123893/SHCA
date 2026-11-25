@@ -7,6 +7,7 @@ import java.net.URL
 
 /** Network failures are retryable results, so they cannot kill local monitoring. */
 internal object WatchHttpTransport {
+    // Send the watch HTTP request with its content type, token and time limits.
     fun post(
         url: String,
         body: String,

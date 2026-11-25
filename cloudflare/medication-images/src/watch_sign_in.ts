@@ -5,6 +5,7 @@ interface SignInEnv {
   FIREBASE_SERVICE_ACCOUNT?: string;
 }
 
+// Return the phone-assisted watch sign-in result as JSON.
 const reply = (value: unknown, status = 200) => Response.json(value, {
   status, headers: { "cache-control": "no-store" },
 });

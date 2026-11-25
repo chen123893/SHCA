@@ -41,6 +41,7 @@ interface Forecast {
 
 const cacheHours = 12;
 
+// Check caregiver access, call the AI model and validate the returned forecast.
 export async function generateStatisticsForecast(
   request: Request,
   env: StatisticsEnv,
@@ -196,6 +197,7 @@ const forecastSchema = {
   ],
 };
 
+// Validate the aggregate history before sending it to the AI model.
 function parseRequest(raw: unknown): ForecastRequest {
   if (!isRecord(raw)) throw new ForecastError(400, "Invalid JSON request.");
   const elderlyId = identifier(raw.elderlyId, "elderlyId");
@@ -255,6 +257,7 @@ function parseRequest(raw: unknown): ForecastRequest {
   return { elderlyId, periodDays, asOf, totals, days, alertHours, fallStatuses };
 }
 
+// Check the model's JSON fields and allowed forecast ranges.
 function parseForecast(raw: unknown): Forecast {
   if (!isRecord(raw)) {
     throw new ForecastError(502, "The AI service returned invalid data.");
@@ -292,6 +295,7 @@ function parseForecast(raw: unknown): Forecast {
   };
 }
 
+// Require an active caregiver link before allowing this statistics request.
 async function caregiverIsLinked(
   caregiverId: string,
   elderlyId: string,
@@ -314,12 +318,14 @@ async function caregiverIsLinked(
     document.fields?.status?.stringValue === "active";
 }
 
+// Choose the configured model only when its name is in the allowed format.
 function safeModel(value: string | undefined): string {
   return value && /^[A-Za-z0-9._\/-]{1,120}$/.test(value)
     ? value
     : "openai/gpt-oss-20b";
 }
 
+// Hash the forecast input for a stable request identifier.
 async function sha256(value: string): Promise<string> {
   const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return Array.from(new Uint8Array(bytes))
@@ -327,6 +333,7 @@ async function sha256(value: string): Promise<string> {
     .join("");
 }
 
+// Return the forecast result or error as JSON.
 function response(value: unknown, status: number): Response {
   return Response.json(value, {
     status,
@@ -334,6 +341,7 @@ function response(value: unknown, status: number): Response {
   });
 }
 
+// Read a non-empty account identifier in the accepted format.
 function identifier(value: unknown, name: string): string {
   if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(value)) {
     throw new ForecastError(400, `Invalid ${name}.`);
@@ -341,6 +349,7 @@ function identifier(value: unknown, name: string): string {
   return value;
 }
 
+// Read a whole number within the accepted limits.
 function integer(
   value: unknown,
   minimum: number,
@@ -353,6 +362,7 @@ function integer(
   return value as number;
 }
 
+// Check every daily total in the supplied history array.
 function integerArray(value: unknown, length: number, name: string): number[] {
   if (!Array.isArray(value) || value.length !== length) {
     throw new ForecastError(400, `Invalid ${name}.`);
@@ -360,6 +370,7 @@ function integerArray(value: unknown, length: number, name: string): number[] {
   return value.map((item, index) => integer(item, 0, 100000, `${name}[${index}]`));
 }
 
+// Read a non-empty text field within the allowed length.
 function text(value: unknown, maximum: number, name: string): string {
   if (typeof value !== "string" || value.trim().length < 1 || value.trim().length > maximum) {
     throw new ForecastError(400, `Invalid ${name}.`);
@@ -367,6 +378,7 @@ function text(value: unknown, maximum: number, name: string): string {
   return value.trim();
 }
 
+// Accept only one of the listed forecast category values.
 function enumValue<const T extends readonly string[]>(
   value: unknown,
   allowed: T,
@@ -378,6 +390,7 @@ function enumValue<const T extends readonly string[]>(
   return value as T[number];
 }
 
+// Check that a value is an object before reading its fields.
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

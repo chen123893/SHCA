@@ -31,9 +31,11 @@ class _PhoneMonitoringWorker {
   Timer? _deadline, _retry;
   bool _stopping = false, _delivering = false, _savingFall = false;
 
+  // Make sure this worker still belongs to the signed-in account.
   bool get _ownsSession =>
       !_stopping && FirebaseAuth.instance.currentUser?.uid == _userId;
 
+  // Restore the phone monitor and listen for service commands.
   Future<void> start() async {
     _channel.setMethodCallHandler((call) async {
       switch (call.method) {
@@ -69,6 +71,7 @@ class _PhoneMonitoringWorker {
     await _monitor.start();
   }
 
+  // Handle a new activity result and start a warning for a possible fall.
   void _onMotion() {
     if (!_ownsSession) return;
     final snapshot = _monitor.snapshot;
@@ -79,6 +82,7 @@ class _PhoneMonitoringWorker {
     unawaited(_publish());
   }
 
+  // Send the monitoring status back to the phone interface.
   Future<void> _publish() async {
     if (!_ownsSession) return;
     final value = _monitor.snapshot;
@@ -100,6 +104,7 @@ class _PhoneMonitoringWorker {
     });
   }
 
+  // Save a pending fall warning before starting its countdown.
   Future<void> _beginFall(ActivitySnapshot value) async {
     _savingFall = true;
     try {
@@ -130,6 +135,7 @@ class _PhoneMonitoringWorker {
     }
   }
 
+  // Continue a pending warning after the background worker restarts.
   void _restorePending() {
     final value = _pending;
     if (value == null || value['userId'] != _userId || !_ownsSession) return;
@@ -157,6 +163,7 @@ class _PhoneMonitoringWorker {
     }
   }
 
+  // Handle safe or help responses and finish the current warning.
   Future<void> _respond(String id, bool send) async {
     final value = _pending;
     if (!_ownsSession ||
@@ -186,6 +193,7 @@ class _PhoneMonitoringWorker {
     }
   }
 
+  // Save the possible-fall event and its final response in Firestore.
   Future<void> _saveFallRecord(Map<String, dynamic> value, String status) =>
       FirebaseFirestore.instance
           .collection('fall_events')
@@ -204,6 +212,7 @@ class _PhoneMonitoringWorker {
               'resolvedAt': FieldValue.serverTimestamp(),
           }, SetOptions(merge: true));
 
+  // Send the emergency alert when the warning needs emergency action.
   Future<void> _deliver() async {
     if (_delivering || !_ownsSession || _pending?['status'] != 'confirmed') {
       return;

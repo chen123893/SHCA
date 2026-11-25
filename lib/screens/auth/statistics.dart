@@ -15,6 +15,7 @@ class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({super.key, this.repository, this.forecastService});
   final HealthStatisticsRepository? repository;
   final AiStatisticsService? forecastService;
+  // Keep this screen's changing values in its own state object.
   @override
   State<StatisticsScreen> createState() => _StatisticsScreenState();
 }
@@ -31,6 +32,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   Future<StatisticsHistory>? _history;
   Future<AiStatisticsForecast>? _aiForecast;
 
+  // Load the linked accounts and the initial statistics request.
   @override
   void initState() {
     super.initState();
@@ -39,6 +41,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     _loadAccounts();
   }
 
+  // Load the caregiver's linked elderly accounts for the statistics selector.
   Future<void> _loadAccounts() async {
     setState(() {
       _loadingAccounts = true;
@@ -68,6 +71,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     }
   }
 
+  // Start a new statistics request for the selected account and period.
   void _reload() {
     final id = _elderlyId;
     if (id == null) {
@@ -77,14 +81,19 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     }
     final history = _repository.load(id, _period, DateTime.now());
     _history = history;
-    _aiForecast = history.then(
+    final forecast = history.then(
       (value) => _forecastService.generate(
         elderlyId: id,
         statistics: value.statistics,
       ),
     );
+    // A failed request can finish before the history view mounts its builder.
+    // The builder still receives the result of the original future.
+    forecast.ignore();
+    _aiForecast = forecast;
   }
 
+  // Reload the visible statistics when the page is refreshed.
   Future<void> _refresh() async {
     setState(_reload);
     try {
@@ -94,6 +103,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     }
   }
 
+  // Create and share a PDF of the currently selected statistics.
   Future<void> _exportPdf(StatisticsHistory visibleHistory) async {
     final selectedPeriod = await showDialog<int>(
       context: context,
@@ -171,6 +181,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     }
   }
 
+  // Open the selected caregiver page from the bottom navigation.
   void _openCaregiverPage(bool medicine) {
     final person = _people
         .where((person) => person.id == _elderlyId)
@@ -195,6 +206,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
+  // Show the account and period selectors with the loaded statistics.
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: elderlyPageBackground,
@@ -347,6 +359,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                         const SizedBox(height: 16),
                         GeminiForecastPanel(
                           forecast: _aiForecast,
+                          outlook: history.statistics.outlook,
                           onRetry: () => setState(() {
                             _aiForecast = _forecastService.generate(
                               elderlyId: _elderlyId!,
@@ -363,6 +376,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           ),
   );
 
+  // Show a loading, empty or error message in the page's card style.
   Widget _message(String message, VoidCallback retry) => Padding(
     padding: const EdgeInsets.all(24),
     child: Column(
@@ -380,13 +394,13 @@ class StatisticsDashboard extends StatelessWidget {
   const StatisticsDashboard({super.key, required this.statistics});
   final HealthStatistics statistics;
 
+  // Show the selected period's medication and fall-alert statistics.
   @override
   Widget build(BuildContext context) {
     final data = statistics;
     final dates = [
       for (final day in data.days) '${day.date.day}/${day.date.month}',
     ];
-    final outlook = data.outlook;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -539,40 +553,6 @@ class StatisticsDashboard extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        _card(
-          'Next 7 days · completion outlook',
-          outlook == null
-              ? const Text(
-                  'More history is needed: at least 7 completed days with dose records and 14 recorded doses. Try a longer date range.',
-                )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Around ${outlook.percent.toStringAsFixed(0)}%',
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
-                        color: statisticsGreen,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'If recording habits and schedules stay similar, recorded completion may remain near this historical rate. Based on ${outlook.recordDays} completed days.',
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Historical uncertainty: ${outlook.lower.toStringAsFixed(0)}–${outlook.upper.toStringAsFixed(0)}% (95% Wilson interval). This is not a guaranteed future range. Missing records and changes in routine can change the outcome.',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        height: 1.5,
-                        color: statisticsMuted,
-                      ),
-                    ),
-                  ],
-                ),
-        ),
-        const SizedBox(height: 16),
         OutlinedButton.icon(
           onPressed: () => Navigator.pushNamed(context, '/knowledge'),
           icon: const Icon(Icons.menu_book_rounded),
@@ -582,6 +562,7 @@ class StatisticsDashboard extends StatelessWidget {
     );
   }
 
+  // Show one labelled statistic in the dashboard.
   Widget _metric(String label, String value) => Container(
     width: 148,
     padding: const EdgeInsets.all(16),
@@ -607,6 +588,7 @@ class StatisticsDashboard extends StatelessWidget {
   );
 }
 
+// Keep each statistics section in the same card layout.
 Widget _card(String title, Widget content) => elderlySectionCard(
   child: Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -626,6 +608,7 @@ class SmartInsightsPanel extends StatelessWidget {
 
   final HealthStatistics statistics;
 
+  // Show the pattern summary calculated from saved records on this device.
   @override
   Widget build(BuildContext context) {
     final insights = statistics.smartInsights;
@@ -777,26 +760,37 @@ class GeminiForecastPanel extends StatelessWidget {
   const GeminiForecastPanel({
     super.key,
     required this.forecast,
+    required this.outlook,
     required this.onRetry,
   });
 
   final Future<AiStatisticsForecast>? forecast;
+  final CompletionOutlook? outlook;
   final VoidCallback onRetry;
 
+  // Load and display the AI forecast or its unavailable state.
   @override
-  Widget build(BuildContext context) => Container(
-    key: const Key('gemini-forecast-panel'),
-    decoration: BoxDecoration(
-      color: const Color(0xFFF5F1FF),
-      borderRadius: BorderRadius.circular(22),
-      border: Border.all(color: const Color(0xFFD9CCFF)),
-    ),
-    padding: const EdgeInsets.all(18),
-    child: FutureBuilder<AiStatisticsForecast>(
-      future: forecast,
-      builder: (context, snapshot) {
-        final value = snapshot.data;
-        return Column(
+  Widget build(BuildContext context) => FutureBuilder<AiStatisticsForecast>(
+    future: forecast,
+    builder: (context, snapshot) {
+      final loading = snapshot.connectionState == ConnectionState.waiting;
+      final value = snapshot.data;
+      if (!loading && value == null) {
+        return _GeminiUnavailable(
+          error: snapshot.error,
+          outlook: outlook,
+          onRetry: onRetry,
+        );
+      }
+      return Container(
+        key: const Key('gemini-forecast-panel'),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF5F1FF),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: const Color(0xFFD9CCFF)),
+        ),
+        padding: const EdgeInsets.all(18),
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
@@ -841,7 +835,7 @@ class GeminiForecastPanel extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 18),
-            if (snapshot.connectionState != ConnectionState.done)
+            if (loading)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 22),
                 child: Column(
@@ -852,40 +846,75 @@ class GeminiForecastPanel extends StatelessWidget {
                   ],
                 ),
               )
-            else if (snapshot.hasError)
-              _GeminiUnavailable(error: snapshot.error, onRetry: onRetry)
-            else if (value != null)
-              _GeminiForecastBody(forecast: value),
+            else
+              _GeminiForecastBody(forecast: value!),
           ],
-        );
-      },
-    ),
+        ),
+      );
+    },
   );
 }
 
 class _GeminiUnavailable extends StatelessWidget {
-  const _GeminiUnavailable({required this.error, required this.onRetry});
+  const _GeminiUnavailable({
+    required this.error,
+    required this.outlook,
+    required this.onRetry,
+  });
 
   final Object? error;
+  final CompletionOutlook? outlook;
   final VoidCallback onRetry;
 
+  // Explain why the AI forecast is not available.
   @override
   Widget build(BuildContext context) {
-    final message = error is StatisticsForecastException
-        ? (error! as StatisticsForecastException).message
-        : 'The AI service could not create a forecast right now. The rule-based outlook is still available.';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(message, style: const TextStyle(height: 1.45)),
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-          key: const Key('retry-gemini-forecast'),
-          onPressed: onRetry,
-          icon: const Icon(Icons.refresh_rounded),
-          label: const Text('Try AI Forecast again'),
-        ),
-      ],
+    final failure = error;
+    final estimate = outlook;
+    final message = failure is StatisticsForecastException
+        ? failure.message
+        : 'AI Forecast is unavailable right now.';
+    return _card(
+      estimate == null
+          ? 'Forecast unavailable'
+          : 'Next 7 days · completion outlook',
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(message, style: const TextStyle(height: 1.45)),
+          if (estimate != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Around ${estimate.percent.toStringAsFixed(0)}%',
+              style: const TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w800,
+                color: statisticsGreen,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'This estimate uses ${estimate.recordDays} completed days of saved records. It assumes the medication schedule and recording habits stay similar.',
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Historical uncertainty: ${estimate.lower.toStringAsFixed(0)}–${estimate.upper.toStringAsFixed(0)}% (95% Wilson interval). Missing records and changes in routine can affect next week’s completion.',
+              style: const TextStyle(
+                fontSize: 12,
+                height: 1.5,
+                color: statisticsMuted,
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            key: const Key('retry-gemini-forecast'),
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Try AI Forecast again'),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -895,6 +924,7 @@ class _GeminiForecastBody extends StatelessWidget {
 
   final AiStatisticsForecast forecast;
 
+  // Show the forecast values, explanation and suggested caregiver actions.
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -969,6 +999,7 @@ class _GeminiForecastBody extends StatelessWidget {
     ],
   );
 
+  // Show one value from the AI forecast with its label.
   static Widget _forecastMetric(String label, String value) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
     decoration: BoxDecoration(
@@ -995,6 +1026,7 @@ class _GeminiForecastBody extends StatelessWidget {
     ),
   );
 
+  // Turn a forecast category into a readable label.
   static String _friendly(String value) => value
       .split('_')
       .map(
@@ -1010,6 +1042,7 @@ class _SmartInsightRow extends StatelessWidget {
 
   final SmartInsight insight;
 
+  // Show one local insight with its severity icon and explanation.
   @override
   Widget build(BuildContext context) {
     final (color, background, icon) = switch (insight.tone) {

@@ -19,6 +19,7 @@ class EmergencyInformationDialog extends StatefulWidget {
   final String deliveryMessage;
   final Future<bool> Function()? onCall;
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<EmergencyInformationDialog> createState() =>
       _EmergencyInformationDialogState();
@@ -29,6 +30,7 @@ class _EmergencyInformationDialogState
   bool _openingDialler = false;
   bool _callFailed = false;
 
+  // Open the selected emergency contact number for a phone call.
   Future<void> _call() async {
     if (_openingDialler || widget.onCall == null) return;
     setState(() {
@@ -48,6 +50,7 @@ class _EmergencyInformationDialogState
     });
   }
 
+  // Show emergency details and the available contact actions.
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);

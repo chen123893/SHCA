@@ -40,6 +40,7 @@ bool confirmsWristFall(List<List<double>> samples, List<String> features) {
     }
   }
   if (impacts >= 3) return false;
+  // Average each acceleration axis across this part of the wrist window.
   List<double> average(List<List<double>> rows) => axes
       .map(
         (axis) => rows.fold(0.0, (sum, row) => sum + row[axis]) / rows.length,
@@ -47,6 +48,7 @@ bool confirmsWristFall(List<List<double>> samples, List<String> features) {
       .toList();
   final before = average(samples.sublist(math.max(0, peak - 30), peak - 5));
   final after = average(tail);
+  // Calculate the length of a three-axis vector.
   double norm(List<double> v) => math.sqrt(v.fold(0.0, (s, x) => s + x * x));
   final product = norm(before) * norm(after);
   if (product < 1) return false;

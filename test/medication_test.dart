@@ -23,6 +23,20 @@ class _DelayedMedicationRepository extends _FakeMedicationRepository {
   }
 }
 
+class _ControlledSaveMedicationRepository extends _FakeMedicationRepository {
+  _ControlledSaveMedicationRepository(super.schedules, {super.records});
+
+  Future<void>? saveGate;
+  int saveCalls = 0;
+
+  @override
+  Future<void> saveRecord(String elderlyId, MedicationRecord record) async {
+    saveCalls++;
+    await saveGate;
+    await super.saveRecord(elderlyId, record);
+  }
+}
+
 class _FakeMedicationRepository implements MedicationRepository {
   _FakeMedicationRepository(
     this.schedules, {
@@ -946,8 +960,30 @@ UBAT TERKAWAL / CONTROLLED MEDICINE / 管制药物
   testWidgets('medication alert provides taken, snooze, and skip actions', (
     tester,
   ) async {
+    const channel = MethodChannel('com.shca.shca/alarm_permissions');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      channel,
+      (_) async => null,
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        null,
+      ),
+    );
     final controller = MedicationController.preview(
       schedules: <MedicationSchedule>[sampleSchedules.first],
+      records: [
+        MedicationRecord(
+          medicationId: sampleSchedules.first.id,
+          scheduledAt: MedicationController.scheduledDateTime(
+            sampleSchedules.first,
+            DateTime.now(),
+          ),
+          status: MedicationStatus.pending,
+          scheduleSnapshot: sampleSchedules.first,
+        ),
+      ],
     );
     await tester.pumpWidget(
       MaterialApp(
@@ -978,6 +1014,126 @@ UBAT TERKAWAL / CONTROLLED MEDICINE / 管制药物
     );
   });
 
+  for (final saveFails in [false, true]) {
+    testWidgets(
+      'Taken shows saving, then ${saveFails ? 'allows retry after failure' : 'closes after persistence'}',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(430, 1100));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        const channel = MethodChannel('com.shca.shca/alarm_permissions');
+        final calls = <MethodCall>[];
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          channel,
+          (call) async {
+            calls.add(call);
+            return null;
+          },
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            channel,
+            null,
+          ),
+        );
+        final medication = sampleSchedules.first;
+        final occurrence = MedicationController.scheduledDateTime(
+          medication,
+          DateTime.now(),
+        );
+        final repository = _ControlledSaveMedicationRepository(
+          [medication],
+          records: [
+            MedicationRecord(
+              medicationId: medication.id,
+              scheduledAt: occurrence,
+              status: MedicationStatus.pending,
+              scheduleSnapshot: medication,
+            ),
+          ],
+        );
+        final ready = Completer<void>();
+        repository.saveGate = ready.future;
+        final controller = MedicationController(
+          storageScope: 'elderly-id',
+          repository: repository,
+        );
+        final navigator = GlobalKey<NavigatorState>();
+        await tester.pumpWidget(
+          MaterialApp(
+            navigatorKey: navigator,
+            home: const Scaffold(body: Text('Home')),
+          ),
+        );
+        navigator.currentState!.push<void>(
+          MaterialPageRoute<void>(
+            builder: (_) => MedicationAlertScreen(
+              elderlyId: 'elderly-id',
+              medicationId: medication.id,
+              scheduledAt: occurrence,
+              controller: controller,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('alert-taken')));
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 5));
+        expect(find.text('Saving your response…'), findsOneWidget);
+        expect(find.byType(LinearProgressIndicator), findsOneWidget);
+        expect(find.text('Medication marked as taken.'), findsNothing);
+        expect(repository.saveCalls, 1);
+        expect(
+          controller.recordFor(medication, scheduledAt: occurrence).status,
+          MedicationStatus.pending,
+        );
+        for (final action in ['taken', 'snooze', 'skip']) {
+          final button = find.descendant(
+            of: find.byKey(Key('alert-$action')),
+            matching: find.byType(FilledButton),
+          );
+          expect(tester.widget<FilledButton>(button).onPressed, isNull);
+        }
+        if (saveFails) {
+          ready.completeError(StateError('Simulated save failure'));
+          await tester.pumpAndSettle();
+          expect(find.text('Saving your response…'), findsNothing);
+          expect(
+            find.text(
+              'Your response could not be saved. Check your connection and try again.',
+            ),
+            findsOneWidget,
+          );
+          expect(
+            controller.recordFor(medication, scheduledAt: occurrence).status,
+            MedicationStatus.pending,
+          );
+          expect(
+            calls.where(
+              (call) => call.method == 'startMedicationAlarmFeedback',
+            ),
+            hasLength(2),
+          );
+          repository.saveGate = null;
+          await tester.tap(find.byKey(const Key('alert-taken')));
+        } else {
+          ready.complete();
+        }
+        await tester.pumpAndSettle();
+        expect(find.text('Home'), findsOneWidget);
+        expect(find.text('Medication Alert'), findsNothing);
+        expect(repository.saveCalls, saveFails ? 2 : 1);
+        expect(repository.records.single.status, MedicationStatus.taken);
+        expect(
+          controller.recordFor(medication, scheduledAt: occurrence).status,
+          MedicationStatus.taken,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+        controller.dispose();
+      },
+    );
+  }
+
   for (final action in ['taken', 'snooze', 'skip', 'back']) {
     testWidgets('alarm feedback starts and stops for $action', (tester) async {
       const channel = MethodChannel('com.shca.shca/alarm_permissions');
@@ -996,6 +1152,17 @@ UBAT TERKAWAL / CONTROLLED MEDICINE / 管制药物
       });
       final controller = MedicationController.preview(
         schedules: <MedicationSchedule>[sampleSchedules.first],
+        records: <MedicationRecord>[
+          MedicationRecord(
+            medicationId: sampleSchedules.first.id,
+            scheduledAt: MedicationController.scheduledDateTime(
+              sampleSchedules.first,
+              DateTime.now(),
+            ),
+            status: MedicationStatus.pending,
+            scheduleSnapshot: sampleSchedules.first,
+          ),
+        ],
       );
       final navigator = GlobalKey<NavigatorState>();
       await tester.pumpWidget(
@@ -1045,6 +1212,65 @@ UBAT TERKAWAL / CONTROLLED MEDICINE / 管制药物
       );
     });
   }
+
+  testWidgets('an old alarm for a Taken dose closes without starting sound', (
+    tester,
+  ) async {
+    const channel = MethodChannel('com.shca.shca/alarm_permissions');
+    final calls = <MethodCall>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+      call,
+    ) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        null,
+      ),
+    );
+    final medication = sampleSchedules.first;
+    final occurrence = MedicationController.scheduledDateTime(
+      medication,
+      DateTime.now(),
+    );
+    final controller = MedicationController.preview(
+      schedules: [medication],
+      records: [
+        MedicationRecord(
+          medicationId: medication.id,
+          scheduledAt: occurrence,
+          status: MedicationStatus.taken,
+          scheduleSnapshot: medication,
+        ),
+      ],
+    );
+    final navigator = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigator,
+        home: const Scaffold(body: Text('Home')),
+      ),
+    );
+    navigator.currentState!.push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => MedicationAlertScreen(
+          elderlyId: 'elderly-id',
+          medicationId: medication.id,
+          scheduledAt: occurrence,
+          controller: controller,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Home'), findsOneWidget);
+    expect(
+      calls.where((call) => call.method == 'startMedicationAlarmFeedback'),
+      isEmpty,
+    );
+    expect(tester.takeException(), isNull);
+  });
 
   for (final stillActive in [true, false]) {
     testWidgets(

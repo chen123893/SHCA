@@ -46,6 +46,7 @@ class ActivityFallResult {
 /// Keep one instance alive while monitoring; creating an Interpreter for every
 /// window is unnecessarily expensive.
 class FallActivityClassifier {
+  // Keep the loaded model settings together and check the input shape.
   FallActivityClassifier._({
     required Interpreter interpreter,
     required List<String> labels,
@@ -95,6 +96,7 @@ class FallActivityClassifier {
   int _activityOutputOrdinal = -1;
   int _fallOutputOrdinal = -1;
 
+  // Load the TFLite model and the settings exported with it.
   static Future<FallActivityClassifier> fromAssets({
     required String modelAsset,
     required String scalerAsset,
@@ -131,6 +133,7 @@ class FallActivityClassifier {
     );
   }
 
+  // Scale one sensor window and read its activity and fall predictions.
   ActivityFallResult classify(List<ImuSample> samples) {
     if (samples.length != windowSize) {
       throw ArgumentError(
@@ -193,6 +196,7 @@ class FallActivityClassifier {
     );
   }
 
+  // Release the TFLite interpreter when it is no longer needed.
   void close() => _interpreter.close();
 }
 
@@ -212,6 +216,7 @@ class FallAlertGate {
   final Queue<bool> _history = Queue<bool>();
   DateTime? _lastAlert;
 
+  // Count recent positive windows and apply the alert cooldown.
   bool observe(double fallProbability, DateTime now) {
     _history.addLast(fallProbability >= threshold);
     while (_history.length > rollingWindowCount) {
@@ -228,6 +233,7 @@ class FallAlertGate {
     return false;
   }
 
+  // Clear the previous fall votes and cooldown.
   void reset() {
     _history.clear();
     _lastAlert = null;

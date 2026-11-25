@@ -14,6 +14,7 @@ const Map<int, String> statisticsExportPeriods = <int, String>{
 class StatisticsPdfService {
   const StatisticsPdfService();
 
+  // Create the PDF from the selected period's saved statistics.
   Future<Uint8List> buildReport({
     required String personName,
     required HealthStatistics statistics,
@@ -389,6 +390,7 @@ class StatisticsPdfService {
     return document.save();
   }
 
+  // Prepare the PDF bytes and open the device's sharing options.
   Future<bool> shareReport({
     required String personName,
     required HealthStatistics statistics,
@@ -415,6 +417,7 @@ class StatisticsPdfService {
     );
   }
 
+  // Add a section heading to the report.
   static pw.Widget _heading(String text, PdfColor color) => pw.Text(
     text,
     style: pw.TextStyle(
@@ -424,6 +427,7 @@ class StatisticsPdfService {
     ),
   );
 
+  // Show one statistic with its label in the PDF.
   static pw.Widget _metric(
     String label,
     String value,
@@ -454,6 +458,7 @@ class StatisticsPdfService {
     ),
   );
 
+  // Draw the report's labelled count breakdown.
   static pw.Widget _breakdown({
     required String title,
     required List<MapEntry<String, int>> values,
@@ -507,11 +512,13 @@ class StatisticsPdfService {
     ),
   );
 
+  // Format dates inside the PDF.
   static String _date(DateTime value) {
     final local = value.toLocal();
     return '${local.day.toString().padLeft(2, '0')}/${local.month.toString().padLeft(2, '0')}/${local.year}';
   }
 
+  // Use a filename-friendly date for the exported report.
   static String _fileDate(DateTime value) {
     final local = value.toLocal();
     return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}';

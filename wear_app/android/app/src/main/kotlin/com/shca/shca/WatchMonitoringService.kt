@@ -37,12 +37,14 @@ class WatchMonitoringService : Service(), SensorEventListener {
     private var gyroscopeSum = 0.0
     private var lastAlertAt = 0L
     private val heartbeat = object : Runnable {
+        // Run the next periodic background monitoring check.
         override fun run() {
             if (!flutterVisible) publishBackgroundHeartbeat()
             handler.postDelayed(this, HEARTBEAT_INTERVAL_MS)
         }
     }
 
+    // Prepare the watch sensor listeners and foreground monitoring service.
     override fun onCreate() {
         super.onCreate()
         if (!isEnabled(this) || !WatchSession.isSignedIn(this)) { stopSelf(); return }
@@ -92,6 +94,7 @@ class WatchMonitoringService : Service(), SensorEventListener {
         WatchFallConfirmation.restore(this)
     }
 
+    // Apply the monitoring command and keep the enabled watch service running.
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (!isEnabled(this) || !WatchSession.isSignedIn(this)) {
             stopSelf(); return START_NOT_STICKY
@@ -99,10 +102,13 @@ class WatchMonitoringService : Service(), SensorEventListener {
         return START_STICKY
     }
 
+    // Return no binder because watch monitoring is controlled by service intents.
     override fun onBind(intent: Intent?): IBinder? = null
 
+    // Receive Android's sensor accuracy callback.
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
+    // Collect new wrist motion readings for the background fall check.
     override fun onSensorChanged(event: SensorEvent) {
         val magnitude = sqrt(
             event.values[0].toDouble() * event.values[0] +
@@ -118,6 +124,7 @@ class WatchMonitoringService : Service(), SensorEventListener {
         evaluateBackgroundFall(magnitude, SystemClock.elapsedRealtime())
     }
 
+    // Check the recent wrist window for a possible background fall.
     private fun evaluateBackgroundFall(acceleration: Double, now: Long) {
         if (impactAt == 0L) {
             if (acceleration < FREE_FALL_THRESHOLD) {
@@ -172,12 +179,14 @@ class WatchMonitoringService : Service(), SensorEventListener {
         impactAt = 0L
     }
 
+    // Save a short monitoring diagnostic for checking sensor behaviour.
     private fun diagnostic(message: String) {
         if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) {
             Log.d("WatchFallDetector", message)
         }
     }
 
+    // Publish the watch's background monitoring status at the set interval.
     private fun publishBackgroundHeartbeat() {
         val now = System.currentTimeMillis()
         val watchIdentity = identity ?: WatchDeviceIdentity.getOrCreate(this).also { identity = it }
@@ -201,10 +210,12 @@ class WatchMonitoringService : Service(), SensorEventListener {
         WatchCloud.refreshIfNeeded(this)
     }
 
+    // Pass a possible background fall into the native confirmation countdown.
     private fun sendBackgroundFall() {
         WatchFallConfirmation.begin(this)
     }
 
+    // Unregister sensors and remove callbacks when watch monitoring stops.
     override fun onDestroy() {
         handler.removeCallbacks(heartbeat)
         if (::sensorManager.isInitialized) sensorManager.unregisterListener(this)
@@ -232,14 +243,17 @@ class WatchMonitoringService : Service(), SensorEventListener {
         @Volatile
         private var flutterVisible = false
 
+        // Switch monitoring behaviour when the Flutter watch screen becomes visible.
         fun setFlutterVisible(visible: Boolean) {
             flutterVisible = visible
         }
 
+        // Read whether watch fall monitoring is enabled.
         fun isEnabled(context: Context): Boolean = context
             .getSharedPreferences("shca_watch_monitoring", Context.MODE_PRIVATE)
             .getBoolean("enabled:${WatchSession.userId(context)}", true)
 
+        // Save the watch monitoring choice and update its service.
         fun setEnabled(context: Context, enabled: Boolean) {
             check(WatchSession.isSignedIn(context)) { "Sign in before changing fall detection." }
             check(context.getSharedPreferences("shca_watch_monitoring", Context.MODE_PRIVATE)
@@ -267,6 +281,7 @@ class WatchMonitoringService : Service(), SensorEventListener {
             }
         }
 
+        // Start the foreground watch service using the supported Android API.
         fun start(context: Context) {
             if (!WatchSession.isSignedIn(context) || !isEnabled(context)) return
             val intent = Intent(context, WatchMonitoringService::class.java)

@@ -24,21 +24,28 @@ import javax.crypto.spec.GCMParameterSpec
 object WatchSession {
     private const val PREFS = "shca_watch_standalone_session_v1"
     private const val KEY_ALIAS = "shca_watch_session_aes_v1"
+    // Read the private watch account and session preferences.
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+    // Check whether sign-in data has been saved for a watch account.
     fun isSignedIn(context: Context): Boolean =
         userId(context).isNotBlank() && prefs(context).getString("refreshToken", "").orEmpty().isNotBlank()
 
+    // Read the account ID saved in the watch session.
     fun userId(context: Context): String = prefs(context).getString("userId", "") ?: ""
+    // Read the account name shown on the watch.
     fun name(context: Context): String = prefs(context).getString("name", "") ?: ""
+    // Read when the watch last completed its cloud sync.
     fun lastCloudSync(context: Context): Long = prefs(context).getLong("lastCloudSync", 0)
 
+    // Prepare the saved watch session values for the Flutter interface.
     fun state(context: Context): Map<String, Any?> = mapOf(
         "signedIn" to isSignedIn(context),
         "accountName" to name(context),
         "cloudReady" to (lastCloudSync(context) > 0),
     )
 
+    // Save the account and encrypted sign-in tokens for the watch session.
     @Synchronized
     fun saveAuthentication(
         context: Context,
@@ -55,19 +62,23 @@ object WatchSession {
             .apply()
     }
 
+    // Update the account name displayed on the watch.
     fun saveName(context: Context, value: String) {
         prefs(context).edit().putString("name", value).apply()
     }
 
+    // Remember when the watch last synced successfully with the cloud.
     fun markCloudSync(context: Context) {
         prefs(context).edit().putLong("lastCloudSync", System.currentTimeMillis()).apply()
     }
 
+    // Remove the saved watch account and session values.
     fun clear(context: Context) {
         prefs(context).edit().clear().apply()
         MedicationStore.receive(context, "", "[]")
     }
 
+    // Reuse a valid ID token or refresh it using the encrypted refresh token.
     @Synchronized
     fun token(context: Context): String? {
         if (!isSignedIn(context)) return null
@@ -98,6 +109,7 @@ object WatchSession {
         return idToken
     }
 
+    // Load or create the Android Keystore key used to encrypt watch tokens.
     private fun secretKey(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (store.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
@@ -113,6 +125,7 @@ object WatchSession {
         return generator.generateKey()
     }
 
+    // Encrypt the token with AES-GCM before saving it in preferences.
     private fun encrypt(value: String): String {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, secretKey())
@@ -120,6 +133,7 @@ object WatchSession {
         return Base64.encodeToString(joined, Base64.NO_WRAP)
     }
 
+    // Decrypt the saved token and reject unreadable encrypted data.
     private fun decrypt(value: String): String? = try {
         val joined = Base64.decode(value, Base64.NO_WRAP)
         if (joined.size <= 12) return null
@@ -141,6 +155,7 @@ object WatchCloud {
     private val refreshing = AtomicBoolean(false)
     private val main = Handler(Looper.getMainLooper())
 
+    // Sign in with the watch's entered email and password.
     fun signIn(
         context: Context,
         email: String,
@@ -176,6 +191,7 @@ object WatchCloud {
         }.start()
     }
 
+    // Save the verified account and initialise the watch's cloud session.
     private fun completeSignIn(context: Context, auth: WatchCloudResponse): Map<String, Any?> {
         val idToken = auth.json.optString("idToken")
         val refreshToken = auth.json.optString("refreshToken")
@@ -207,6 +223,7 @@ object WatchCloud {
         }
     }
 
+    // Finish phone-assisted sign-in using the approved Firebase custom token.
     fun signInWithCustomToken(
         context: Context, customToken: String, stillApproved: () -> Boolean,
         callback: (Map<String, Any?>) -> Unit,
@@ -227,6 +244,7 @@ object WatchCloud {
         }.start()
     }
 
+    // Clear the watch account and the account-specific monitoring state.
     fun signOut(context: Context) {
         WatchPhoneSignIn.cancel(context)
         WatchFallConfirmation.cancelAll(context)
@@ -237,6 +255,7 @@ object WatchCloud {
         WatchEventBus.emit(mapOf("type" to "session_updated"))
     }
 
+    // Refresh cloud data only when the previous sync is old enough.
     fun refreshIfNeeded(context: Context, force: Boolean = false) {
         if (!WatchSession.isSignedIn(context) || !refreshing.compareAndSet(false, true)) return
         Thread {
@@ -251,6 +270,7 @@ object WatchCloud {
         }.start()
     }
 
+    // Load the current cloud account and medication snapshot for the watch.
     private fun refreshNow(context: Context, force: Boolean) {
         if (!force && System.currentTimeMillis() - WatchSession.lastCloudSync(context) < 60_000) return
         val now = Date()
@@ -270,6 +290,7 @@ object WatchCloud {
         WatchEventBus.emit(mapOf("type" to "session_updated"))
     }
 
+    // Send the watch's current movement status to the cloud.
     fun publishActivity(context: Context, values: Map<String, Any?>) {
         if (!WatchSession.isSignedIn(context)) return
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -285,6 +306,7 @@ object WatchCloud {
         }.start()
     }
 
+    // Save a dose response for cloud delivery using its event ID.
     fun queueMedicationAction(context: Context, payload: JSONObject) {
         val id = payload.optString("eventId")
         if (id.isBlank()) return
@@ -297,6 +319,7 @@ object WatchCloud {
         refreshIfNeeded(context, force = true)
     }
 
+    // Retry queued dose responses and remove the acknowledged actions.
     private fun retryMedicationActions(context: Context) {
         if (!WatchSession.isSignedIn(context)) return
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -318,6 +341,7 @@ object WatchCloud {
         p.edit().putString("medication", pending.toString()).apply()
     }
 
+    // Send the account token with the request and retry once after a 401 refresh.
     private fun authorizedPost(context: Context, path: String, body: JSONObject): WatchCloudResponse {
         val token = WatchSession.token(context) ?: return WatchCloudResponse(401, JSONObject(mapOf("error" to "Sign in again.")))
         var response = request("$BASE$path", body.toString(), authorization = token)
@@ -330,6 +354,7 @@ object WatchCloud {
         return response
     }
 
+    // Pass the cloud request through the shared watch HTTP transport.
     fun request(
         url: String,
         body: String,

@@ -33,6 +33,7 @@ class CaregiverDashboardScreen extends StatefulWidget {
 
   final CareLinkRepository? repository;
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<CaregiverDashboardScreen> createState() =>
       _CaregiverDashboardScreenState();
@@ -47,6 +48,7 @@ class _CaregiverDashboardScreenState extends State<CaregiverDashboardScreen> {
   String? _caregiverId;
   int _refreshVersion = 0;
 
+  // Load the linked accounts and prepare the dashboard alert listeners.
   @override
   void initState() {
     super.initState();
@@ -54,6 +56,7 @@ class _CaregiverDashboardScreenState extends State<CaregiverDashboardScreen> {
     unawaited(_load());
   }
 
+  // Load linked elderly accounts for the dashboard.
   Future<void> _load() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -85,12 +88,14 @@ class _CaregiverDashboardScreenState extends State<CaregiverDashboardScreen> {
     }
   }
 
+  // Read the caregiver's linked account list from the repository.
   Future<List<LinkedElderly>> _loadLinked(String caregiverId) async {
     final linked = await _repository.loadLinkedElderly(caregiverId);
     if (mounted) setState(() => _linkedElderly = linked);
     return linked;
   }
 
+  // Replace the linked-account request and rebuild its alert stream.
   void _setLinkedFuture(
     String caregiverId,
     Future<List<LinkedElderly>> linked,
@@ -103,6 +108,7 @@ class _CaregiverDashboardScreenState extends State<CaregiverDashboardScreen> {
     );
   }
 
+  // Reload the caregiver's linked accounts and dashboard data.
   Future<void> _refresh() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
@@ -113,6 +119,7 @@ class _CaregiverDashboardScreenState extends State<CaregiverDashboardScreen> {
     await _linkedFuture;
   }
 
+  // Open the linking form and refresh the list afterwards.
   Future<void> _openLinkElderly() async {
     await Navigator.push<void>(
       context,
@@ -121,6 +128,7 @@ class _CaregiverDashboardScreenState extends State<CaregiverDashboardScreen> {
     if (mounted) await _refresh();
   }
 
+  // Open the monitoring details for the selected elderly account.
   void _openStatus(LinkedElderly elderly) {
     Navigator.push<void>(
       context,
@@ -133,6 +141,7 @@ class _CaregiverDashboardScreenState extends State<CaregiverDashboardScreen> {
     );
   }
 
+  // Open the medication page for the selected elderly account.
   void _openMedication(LinkedElderly elderly) {
     Navigator.push<void>(
       context,
@@ -145,10 +154,12 @@ class _CaregiverDashboardScreenState extends State<CaregiverDashboardScreen> {
     );
   }
 
+  // Open the profile page.
   void _openProfile() {
     Navigator.pushNamed(context, '/caregiver-profile');
   }
 
+  // Open the caregiver page selected in the bottom navigation.
   void _handleNavigation(int index) {
     if (index == 0) return;
     if (index == 1) {
@@ -174,6 +185,7 @@ class _CaregiverDashboardScreenState extends State<CaregiverDashboardScreen> {
     _openProfile();
   }
 
+  // Show linked elderly accounts with their medication and emergency summaries.
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -274,6 +286,7 @@ class _CaregiverDashboardScreenState extends State<CaregiverDashboardScreen> {
     );
   }
 
+  // Show the current emergency alerts from linked elderly accounts.
   Widget _buildEmergencyStatus() {
     final caregiverId = _caregiverId;
     if (caregiverId == null) return const _LoadingCard(compact: true);
@@ -345,6 +358,7 @@ class _CaregiverDashboardScreenState extends State<CaregiverDashboardScreen> {
     );
   }
 
+  // Choose the greeting based on the current hour.
   String _greeting() {
     final hour = DateTime.now().hour;
     if (hour < 12) return 'Good morning';
@@ -367,6 +381,7 @@ class CaregiverElderlyStatusScreen extends StatefulWidget {
   final CareLinkRepository? careLinkRepository;
   final String? caregiverId;
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<CaregiverElderlyStatusScreen> createState() =>
       _CaregiverElderlyStatusScreenState();
@@ -378,6 +393,7 @@ class _CaregiverElderlyStatusScreenState
   late List<LinkedElderly> _linkedElderly;
   late Future<_Overview> _overviewFuture;
 
+  // Load the elderly account selector and the selected account details.
   @override
   void initState() {
     super.initState();
@@ -390,6 +406,7 @@ class _CaregiverElderlyStatusScreenState
     if (widget.linkedElderly == null) unawaited(_loadLinkedElderly());
   }
 
+  // Keep the selected elderly account available when rebuilding the list.
   List<LinkedElderly> _withSelected(
     List<LinkedElderly> people,
     LinkedElderly selected,
@@ -401,6 +418,7 @@ class _CaregiverElderlyStatusScreenState
     return values;
   }
 
+  // Load the linked accounts for the elderly selector.
   Future<void> _loadLinkedElderly() async {
     try {
       final repository =
@@ -425,6 +443,7 @@ class _CaregiverElderlyStatusScreenState
     }
   }
 
+  // Switch the status page to the selected elderly account.
   void _selectElderly(String id) {
     final selected = _linkedElderly
         .where((person) => person.id == id)
@@ -436,11 +455,13 @@ class _CaregiverElderlyStatusScreenState
     });
   }
 
+  // Reload the caregiver's linked accounts and dashboard data.
   Future<void> _refresh() async {
     setState(() => _overviewFuture = _loadOverview(_selectedElderly.id));
     await _overviewFuture;
   }
 
+  // Open the medication page for the selected elderly account.
   void _openMedication({bool replace = false}) {
     final route = MaterialPageRoute<void>(
       builder: (_) => CaregiverMedicationScheduleScreen(
@@ -455,6 +476,7 @@ class _CaregiverElderlyStatusScreenState
     }
   }
 
+  // Copy the selected elderly person's emergency contact number.
   Future<void> _copyEmergencyNumber() async {
     if (_selectedElderly.emergencyPhone.isEmpty) return;
     await Clipboard.setData(
@@ -466,6 +488,7 @@ class _CaregiverElderlyStatusScreenState
     );
   }
 
+  // Show the selected elderly account's monitoring details and history.
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -617,6 +640,7 @@ class _ActiveEmergencyPanel extends StatefulWidget {
 
   final LinkedElderly elderly;
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<_ActiveEmergencyPanel> createState() => _ActiveEmergencyPanelState();
 }
@@ -624,6 +648,7 @@ class _ActiveEmergencyPanel extends StatefulWidget {
 class _ActiveEmergencyPanelState extends State<_ActiveEmergencyPanel> {
   String? _resolvingId;
 
+  // Mark the emergency alert as resolved and refresh its status.
   Future<void> _resolve(
     QueryDocumentSnapshot<Map<String, dynamic>> alert,
   ) async {
@@ -653,6 +678,7 @@ class _ActiveEmergencyPanelState extends State<_ActiveEmergencyPanel> {
     }
   }
 
+  // Show the unresolved emergency alerts and the resolve action.
   @override
   Widget build(BuildContext context) {
     final caregiverId = FirebaseAuth.instance.currentUser?.uid;
@@ -763,6 +789,7 @@ class _ElderlyCard extends StatefulWidget {
   final VoidCallback onViewStatus;
   final VoidCallback onManageMedication;
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<_ElderlyCard> createState() => _ElderlyCardState();
 }
@@ -770,12 +797,14 @@ class _ElderlyCard extends StatefulWidget {
 class _ElderlyCardState extends State<_ElderlyCard> {
   late Future<_Overview> _overviewFuture;
 
+  // Start loading the overview for this elderly card.
   @override
   void initState() {
     super.initState();
     _overviewFuture = _loadOverview(widget.elderly.id);
   }
 
+  // Replace the elderly card's overview request when its account changes.
   @override
   void didUpdateWidget(covariant _ElderlyCard oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -785,6 +814,7 @@ class _ElderlyCardState extends State<_ElderlyCard> {
     }
   }
 
+  // Show the linked elderly person's details and loaded overview.
   @override
   Widget build(BuildContext context) {
     final elderly = widget.elderly;
@@ -929,9 +959,11 @@ class _DashboardAppBar extends StatelessWidget implements PreferredSizeWidget {
   final bool showAvatar;
   final bool showBack;
 
+  // Give Flutter the height needed for this page header.
   @override
   Size get preferredSize => const Size.fromHeight(64);
 
+  // Show the caregiver dashboard heading and page actions.
   @override
   Widget build(BuildContext context) {
     return AppBar(
@@ -989,6 +1021,7 @@ class _SectionHeading extends StatelessWidget {
   final String? actionLabel;
   final VoidCallback? onAction;
 
+  // Show a dashboard section title and its optional action.
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -1032,6 +1065,7 @@ class _SurfaceCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
 
+  // Wrap dashboard content in the shared rounded surface style.
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -1071,6 +1105,7 @@ class _MessageCard extends StatelessWidget {
   final String? actionLabel;
   final VoidCallback? onAction;
 
+  // Show a dashboard notice in the shared card style.
   @override
   Widget build(BuildContext context) {
     return _SurfaceCard(
@@ -1124,6 +1159,7 @@ class _HorizontalStatusCard extends StatelessWidget {
   final Color color;
   final VoidCallback? onTap;
 
+  // Show a dashboard status with its icon, title and value.
   @override
   Widget build(BuildContext context) {
     return _SurfaceCard(
@@ -1184,6 +1220,7 @@ class _OverviewTile extends StatelessWidget {
   final String value;
   final Color color;
 
+  // Show a labelled value in the elderly account overview.
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -1228,6 +1265,7 @@ class _CaregiverActivityTile extends StatelessWidget {
 
   final String elderlyId;
 
+  // Show one phone or watch activity result in the caregiver view.
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
@@ -1257,6 +1295,7 @@ class _CaregiverActivityStatusCard extends StatelessWidget {
 
   final String elderlyId;
 
+  // Show the most recent movement status reported for the elderly account.
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
@@ -1312,6 +1351,7 @@ class _RemoteActivity {
   final bool active;
   final DateTime? updatedAt;
 
+  // Read the saved activity status and decide whether it is still current.
   factory _RemoteActivity.fromData(Map<String, dynamic>? data) {
     final candidates = <_RemoteActivity>[];
     for (final source in const <String>['phone', 'watch']) {
@@ -1365,6 +1405,7 @@ class _RemoteActivity {
   }
 }
 
+// Turn the saved activity label into a simple name.
 String _friendlyActivity(String label) => switch (label.trim().toLowerCase()) {
   'walking' => 'Walking',
   'running' => 'Running',
@@ -1382,6 +1423,7 @@ class _MedicationCounts extends StatelessWidget {
 
   final _MedicationSummary summary;
 
+  // Show today's medication totals grouped by response status.
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -1425,6 +1467,7 @@ class _CountCard extends StatelessWidget {
   final int value;
   final Color color;
 
+  // Show one labelled medication count.
   @override
   Widget build(BuildContext context) {
     return _SurfaceCard(
@@ -1452,6 +1495,7 @@ class _FallStatusCard extends StatelessWidget {
 
   final _FallEvent? event;
 
+  // Summarise the selected account's recent fall-alert status.
   @override
   Widget build(BuildContext context) {
     final latest = event;
@@ -1493,6 +1537,7 @@ class _FallHistory extends StatelessWidget {
 
   final List<_FallEvent> events;
 
+  // List the saved fall events for the selected elderly account.
   @override
   Widget build(BuildContext context) {
     return _SurfaceCard(
@@ -1514,6 +1559,7 @@ class _FallHistoryRow extends StatelessWidget {
 
   final _FallEvent event;
 
+  // Show the date and outcome of one saved fall event.
   @override
   Widget build(BuildContext context) {
     final cancelled = event.status == 'cancelled';
@@ -1559,6 +1605,7 @@ class _EmergencyContactCard extends StatelessWidget {
   final String phone;
   final VoidCallback onCopy;
 
+  // Show the saved emergency contact details.
   @override
   Widget build(BuildContext context) {
     return _SurfaceCard(
@@ -1606,6 +1653,7 @@ class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String text;
 
+  // Show one saved detail beside its label.
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -1630,6 +1678,7 @@ class _StatusPill extends StatelessWidget {
   final String label;
   final Color color;
 
+  // Show a short status label with its matching colour.
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -1655,6 +1704,7 @@ class _LoadingCard extends StatelessWidget {
 
   final bool compact;
 
+  // Show progress while a dashboard section is loading.
   @override
   Widget build(BuildContext context) {
     return _SurfaceCard(
@@ -1669,6 +1719,7 @@ class _LoadingCard extends StatelessWidget {
 class _PrivacyNote extends StatelessWidget {
   const _PrivacyNote();
 
+  // Explain the information shown to linked caregivers.
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -1705,6 +1756,7 @@ class _Overview {
   final _MedicationSummary medication;
   final List<_FallEvent> falls;
 
+  // Find the newest fall alert in the loaded overview.
   _FallEvent? get latestFall => falls.isEmpty ? null : falls.first;
 }
 
@@ -1721,6 +1773,7 @@ class _MedicationSummary {
   final int pending;
   final int missed;
 
+  // Count all dose statuses in the medication summary.
   int get total => taken + pending + missed;
 }
 
@@ -1735,6 +1788,7 @@ class _FallEvent {
   final String activity;
   final DateTime? detectedAt;
 
+  // Read a saved fall event for the caregiver's history list.
   factory _FallEvent.fromFirestore(Map<String, dynamic> data) {
     return _FallEvent(
       status: _nonEmptyText(data['status'], 'pending_confirmation'),
@@ -1744,6 +1798,7 @@ class _FallEvent {
   }
 }
 
+// Load medication counts and fall events for one elderly account.
 Future<_Overview> _loadOverview(String elderlyId) async {
   final medicationRepository = FirestoreMedicationRepository();
   final results = await Future.wait<Object>([
@@ -1774,6 +1829,7 @@ Future<_Overview> _loadOverview(String elderlyId) async {
   );
 }
 
+// Count today's doses by their saved status.
 _MedicationSummary _summaryForToday(
   List<MedicationSchedule> schedules,
   List<MedicationRecord> records,
@@ -1813,6 +1869,7 @@ _MedicationSummary _summaryForToday(
   return _MedicationSummary(taken: taken, pending: pending, missed: missed);
 }
 
+// Combine the available age and gender for the elderly card.
 String _demographicText(LinkedElderly elderly) {
   final parts = <String>[];
   if (elderly.age != null) parts.add('${elderly.age} years old');
@@ -1823,16 +1880,19 @@ String _demographicText(LinkedElderly elderly) {
   return parts.isEmpty ? 'Linked elderly account' : parts.join(' • ');
 }
 
+// Use the fallback text when a saved field is blank.
 String _nonEmptyText(dynamic value, String fallback) {
   final text = value is String ? value.trim() : '';
   return text.isEmpty ? fallback : text;
 }
 
+// Read a saved timestamp as milliseconds for comparison.
 int _timestampMillis(dynamic value) {
   if (value is Timestamp) return value.millisecondsSinceEpoch;
   return 0;
 }
 
+// Show the saved date and time together.
 String _formatDateTime(DateTime? value) {
   if (value == null) return 'Time pending';
   final hour = value.hour == 0

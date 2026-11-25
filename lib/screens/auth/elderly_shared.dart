@@ -13,6 +13,7 @@ class ElderlyPageHeader extends StatelessWidget {
   final String title;
   final VoidCallback? onProfile;
 
+  // Show the shared elderly page heading and back action.
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -103,6 +104,7 @@ class ElderlyBottomNavigation extends StatelessWidget {
   final VoidCallback onMonitor;
   final VoidCallback onProfile;
 
+  // Show the elderly pages and highlight the current page.
   @override
   Widget build(BuildContext context) {
     final items = <(IconData, String, VoidCallback)>[
@@ -183,6 +185,7 @@ class ElderlyBottomNavigation extends StatelessWidget {
   }
 }
 
+// Wrap elderly-page content in the shared rounded card style.
 Widget elderlySectionCard({required Widget child}) {
   return Container(
     width: double.infinity,

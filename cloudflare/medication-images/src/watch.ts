@@ -35,12 +35,14 @@ class MedicationCommitError extends Error {
   }
 }
 
+// Read the document version used to avoid overwriting a newer response.
 function documentVersion(document: FirestoreDocument | null): ConditionalWrite['currentDocument'] {
   if (!document) return { exists: false };
   if (!document.updateTime) throw new Error('Firestore document version is missing.');
   return { updateTime: document.updateTime };
 }
 
+// Save the dose and stock changes together with their version checks.
 async function commitMedicationWrites(
   env: WatchEnv,
   token: string,
@@ -63,6 +65,7 @@ async function commitMedicationWrites(
 const credentialPattern = /^[a-f0-9]{40}$/;
 const identifierPattern = /^[A-Za-z0-9_-]{1,128}$/;
 
+// Return the watch request's result as JSON.
 function reply(value: unknown, status = 200): Response {
   return Response.json(value, {
     status,
@@ -70,10 +73,12 @@ function reply(value: unknown, status = 200): Response {
   });
 }
 
+// Build the Firestore REST URL for the configured project.
 function base(env: WatchEnv): string {
   return `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(env.FIREBASE_PROJECT_ID)}/databases/(default)`;
 }
 
+// Read one Firestore document with the provided backend access token.
 async function readDocument(
   env: WatchEnv,
   path: string,
@@ -88,6 +93,7 @@ async function readDocument(
   return await response.json() as FirestoreDocument;
 }
 
+// Run a Firestore query for the watch account's saved data.
 async function queryDocuments(
   env: WatchEnv,
   collection: string,
@@ -119,6 +125,7 @@ async function queryDocuments(
   return rows.flatMap(row => row.document ? [row.document] : []);
 }
 
+// Save the supplied fields to the requested Firestore document.
 async function writeDocument(
   env: WatchEnv,
   path: string,
@@ -141,23 +148,28 @@ async function writeDocument(
   if (!response.ok) throw new Error(`Firestore write failed: ${response.status}`);
 }
 
+// Read a text field from a Firestore REST document.
 function stringField(fields: Record<string, FirestoreValue> | undefined, key: string): string {
   return fields?.[key]?.stringValue?.trim() ?? "";
 }
 
+// Read an integer field from a Firestore REST document.
 function intField(fields: Record<string, FirestoreValue> | undefined, key: string, fallback = 0): number {
   const value = Number(fields?.[key]?.integerValue ?? fields?.[key]?.doubleValue);
   return Number.isFinite(value) ? Math.trunc(value) : fallback;
 }
 
+// Prepare a text value in Firestore's REST field format.
 function stringValue(value: string): FirestoreValue {
   return { stringValue: value };
 }
 
+// Prepare an integer value in Firestore's REST field format.
 function integerValue(value: number): FirestoreValue {
   return { integerValue: String(Math.trunc(value)) };
 }
 
+// Read the calendar date used for the watch schedule.
 function localDate(timestamp: string | undefined, offsetMinutes: number): string {
   if (!timestamp) return "";
   const time = Date.parse(timestamp);
@@ -165,10 +177,12 @@ function localDate(timestamp: string | undefined, offsetMinutes: number): string
   return new Date(time + offsetMinutes * 60_000).toISOString().slice(0, 10);
 }
 
+// Count calendar days between two schedule dates.
 function daysBetween(first: string, second: string): number {
   return Math.floor((Date.parse(`${second}T00:00:00Z`) - Date.parse(`${first}T00:00:00Z`)) / 86_400_000);
 }
 
+// Check whether the medicine repeats on the requested day.
 function scheduledOn(
   fields: Record<string, FirestoreValue>,
   date: string,
@@ -196,6 +210,7 @@ function scheduledOn(
   return true;
 }
 
+// Combine the medicine's saved quantity and strength for the watch.
 function doseSummary(fields: Record<string, FirestoreValue>): string {
   const raw = stringField(fields, "dose");
   const quantity = Math.max(1, intField(fields, "quantity", 1));
@@ -207,6 +222,7 @@ function doseSummary(fields: Record<string, FirestoreValue>): string {
     : `${raw} • ${quantityText}`;
 }
 
+// Keep the medicine details with the watch's saved dose response.
 function scheduleSnapshot(fields: Record<string, FirestoreValue>): FirestoreValue {
   const keys = [
     "name", "dose", "quantity", "instruction", "category", "visual",
@@ -220,6 +236,7 @@ function scheduleSnapshot(fields: Record<string, FirestoreValue>): FirestoreValu
   };
 }
 
+// Reject watch requests that do not belong to an elderly account.
 async function requireElderly(
   env: WatchEnv,
   uid: string,
@@ -229,6 +246,7 @@ async function requireElderly(
   return stringField(user?.fields, "role") === "elderly" ? user : null;
 }
 
+// Register the authenticated watch session for cloud requests.
 export async function openWatchSession(
   request: Request,
   env: WatchEnv,
@@ -262,6 +280,7 @@ export async function openWatchSession(
   }
 }
 
+// Load the account and medication details needed by the watch.
 export async function watchSnapshot(
   request: Request,
   env: WatchEnv,
@@ -319,6 +338,7 @@ export async function watchSnapshot(
   }
 }
 
+// Save the activity result published by the watch.
 export async function saveWatchActivity(
   request: Request,
   env: WatchEnv,
@@ -359,6 +379,7 @@ export async function saveWatchActivity(
   }
 }
 
+// Save the watch dose response and update stock once for a taken dose.
 export async function saveWatchMedicationAction(
   request: Request,
   env: WatchEnv,

@@ -26,8 +26,10 @@ object WatchFallConfirmation {
     private var overlayManager: WindowManager? = null
     private var screenLock: PowerManager.WakeLock? = null
     private val listeners = mutableSetOf<() -> Unit>()
+    // Read the saved watch fall-confirmation state.
     private fun prefs(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+    // Read the pending fall warning for the current watch account.
     fun current(c: Context): WatchPendingFall? = try {
         val j = JSONObject(prefs(c).getString("state", "") ?: "")
         WatchPendingFall(j.getString("eventId"), j.getString("userId"), j.getLong("createdAt"),
@@ -36,6 +38,7 @@ object WatchFallConfirmation {
             else if (j.isNull("firstShownAt")) null else j.getLong("firstShownAt"))
     } catch (_: Exception) { null }
 
+    // Persist the warning so its countdown can survive an activity restart.
     private fun save(c: Context, value: WatchPendingFall) {
         check(prefs(c).edit().putString("state", JSONObject(mapOf(
             "eventId" to value.eventId, "userId" to value.userId, "createdAt" to value.createdAt,
@@ -44,6 +47,7 @@ object WatchFallConfirmation {
             "firstShownAt" to (value.firstShownAt ?: JSONObject.NULL))).toString()).commit())
     }
 
+    // Create one pending warning and schedule its confirmation deadline.
     @Synchronized
     fun begin(context: Context, probability: Double = .95, preview: Boolean = false): Boolean {
         val c = context.applicationContext
@@ -78,6 +82,7 @@ object WatchFallConfirmation {
         try { screenLock?.takeIf { it.isHeld }?.let { it.release(); it.acquire(16_000) } } catch (_: Exception) { }
     }
 
+    // Restore the current watch warning and its countdown after a restart.
     @Synchronized
     fun restore(context: Context) {
         val c = context.applicationContext
@@ -94,6 +99,7 @@ object WatchFallConfirmation {
         }
     }
 
+    // Confirm the matching warning and start emergency delivery when allowed.
     @Synchronized
     fun confirm(context: Context, id: String, sendNow: Boolean = false) {
         val c = context.applicationContext
@@ -107,6 +113,7 @@ object WatchFallConfirmation {
         WatchEventBus.emit(mapOf("type" to "fall_confirmation_resolved", "cancelled" to false))
     }
 
+    // Save the user's safe response for the matching pending warning.
     @Synchronized
     fun cancel(context: Context, id: String) {
         val c = context.applicationContext
@@ -118,12 +125,14 @@ object WatchFallConfirmation {
         WatchEventBus.emit(mapOf("type" to "fall_confirmation_resolved", "cancelled" to true))
     }
 
+    // Clear pending watch warnings and their scheduled callbacks.
     @Synchronized
     fun cancelAll(c: Context) {
         current(c)?.takeIf { it.status == "pending" }?.let { save(c, it.copy(status = "cancelled")) }
         finishScreen(c)
     }
 
+    // Deliver the confirmed fall emergency if its account and age checks pass.
     private fun deliver(c: Context, state: WatchPendingFall) {
         // Preview is local only: never queue cloud or phone emergency delivery.
         if (state.preview) {
@@ -145,10 +154,12 @@ object WatchFallConfirmation {
         Wearable.getDataClient(c).putDataItem(request)
     }
 
+    // Build the deadline intent for the current fall warning.
     private fun alarm(c: Context, id: String): PendingIntent = PendingIntent.getBroadcast(c, 9420,
         Intent(c, WatchFallReceiver::class.java).setAction("deadline").putExtra("eventId", id),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
+    // Schedule the warning's confirmation deadline with Android.
     private fun schedule(c: Context, state: WatchPendingFall) {
         deadlineTask?.let { handler.removeCallbacks(it) }
         val delay = (state.deadline - System.currentTimeMillis()).coerceAtLeast(0)
@@ -162,11 +173,13 @@ object WatchFallConfirmation {
         } catch (_: SecurityException) { /* The foreground service's wake lock also keeps the timer running. */ }
     }
 
+    // Prepare the intent used by a native warning response action.
     private fun action(c: Context, state: WatchPendingFall, action: String, requestCode: Int): PendingIntent =
         PendingIntent.getBroadcast(c, requestCode, Intent(c, WatchFallReceiver::class.java)
             .setAction(action).putExtra("eventId", state.eventId),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
+    // Show the watch warning screen and start its countdown feedback.
     private fun present(c: Context, state: WatchPendingFall) {
         WatchAlertVibration.startFallCountdown(c)
         @Suppress("DEPRECATION")
@@ -210,6 +223,7 @@ object WatchFallConfirmation {
         }
     }
 
+    // Show the watch warning above other screens when permission allows it.
     private fun showOverlay(c: Context, state: WatchPendingFall) {
         if (overlay != null) return
         val manager = c.getSystemService(WindowManager::class.java)
@@ -224,6 +238,7 @@ object WatchFallConfirmation {
         } catch (_: Exception) { }
     }
 
+    // Close the warning activity and remove its overlay.
     private fun finishScreen(c: Context) {
         deadlineTask?.let { handler.removeCallbacks(it) }; deadlineTask = null
         current(c)?.let { c.getSystemService(AlarmManager::class.java).cancel(alarm(c, it.eventId)) }
@@ -235,11 +250,14 @@ object WatchFallConfirmation {
         listeners.toList().forEach { it() }
     }
 
+    // Register a callback for changes to the current watch warning.
     fun listen(listener: () -> Unit) { listeners.add(listener) }
+    // Remove the warning callback when its view is no longer used.
     fun unlisten(listener: () -> Unit) { listeners.remove(listener) }
 }
 
 class WatchFallReceiver : BroadcastReceiver() {
+    // Handle the warning deadline or a native safe/help response action.
     override fun onReceive(context: Context, intent: Intent) {
         val id = intent.getStringExtra("eventId") ?: return
         when (intent.action) {
@@ -256,6 +274,7 @@ class WatchFallView(context: Context, private val eventId: String) : LinearLayou
     private val counter = TextView(context)
     private var firstFramePosted = false
     private val tick = object : Runnable {
+        // Refresh the displayed watch countdown while the warning view is attached.
         override fun run() {
             val state = WatchFallConfirmation.current(context)
             if (state?.eventId == eventId && state.status == "pending") {
@@ -268,8 +287,10 @@ class WatchFallView(context: Context, private val eventId: String) : LinearLayou
         orientation = VERTICAL; gravity = Gravity.CENTER
         setBackgroundColor(0xfffff2ed.toInt())
         val density = resources.displayMetrics.density
+        // Convert the warning layout's dp values into screen pixels.
         fun dp(n: Int) = (n * density).toInt()
         setPadding(dp(30), dp(16), dp(30), dp(16))
+        // Create a text label for the native watch warning.
         fun label(text: String, size: Float) = TextView(context).apply {
             this.text = text; textSize = size; gravity = Gravity.CENTER
             setTextColor(0xff241d19.toInt())
@@ -281,6 +302,7 @@ class WatchFallView(context: Context, private val eventId: String) : LinearLayou
         counter.setTextColor(0xffd32f2f.toInt()); counter.setTypeface(null, Typeface.BOLD)
         addView(counter, LayoutParams(-1, dp(38)))
         addView(label("Caregiver alerted when timer ends", 10f))
+        // Create a large safe or help button for the native watch warning.
         fun button(text: String, color: Int, action: () -> Unit) {
             addView(Button(context).apply {
                 this.text = text; isAllCaps = false; textSize = 13f; minHeight = 0
@@ -293,6 +315,7 @@ class WatchFallView(context: Context, private val eventId: String) : LinearLayou
         button("Send alert", 0xffe63832.toInt()) { WatchFallConfirmation.confirm(context, eventId, true) }
         isFocusableInTouchMode = true; requestFocus()
     }
+    // Draw the watch countdown overlay inside the available display area.
     override fun dispatchDraw(canvas: android.graphics.Canvas) {
         if (!firstFramePosted) {
             firstFramePosted = true
@@ -302,8 +325,11 @@ class WatchFallView(context: Context, private val eventId: String) : LinearLayou
         }
         super.dispatchDraw(canvas)
     }
+    // Start countdown refreshes when the watch warning is displayed.
     override fun onAttachedToWindow() { super.onAttachedToWindow(); handler.post(tick) }
+    // Stop countdown refreshes when the watch warning view is removed.
     override fun onDetachedFromWindow() { handler.removeCallbacks(tick); super.onDetachedFromWindow() }
+    // Consume Back so it cannot silently dismiss the pending warning.
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean = if (keyCode == KeyEvent.KEYCODE_BACK) true else super.onKeyDown(keyCode, event)
 }
 
@@ -311,6 +337,7 @@ class WatchFallConfirmationActivity : Activity() {
     private val changed: () -> Unit = {
         if (WatchFallConfirmation.current(this)?.status != "pending") finish()
     }
+    // Create the native warning activity and attach it to the current pending fall.
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val id = intent.getStringExtra("eventId")
@@ -321,7 +348,9 @@ class WatchFallConfirmationActivity : Activity() {
         setContentView(WatchFallView(this, id))
         WatchFallConfirmation.listen(changed)
     }
+    // Keep the warning open until the user chooses a response.
     @Deprecated("The pending fall can only be cancelled with the explicit safe response")
     override fun onBackPressed() { }
+    // Detach the warning activity's callback when it is destroyed.
     override fun onDestroy() { WatchFallConfirmation.unlisten(changed); super.onDestroy() }
 }

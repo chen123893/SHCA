@@ -31,17 +31,20 @@ class AiStatisticsForecast {
   final DateTime generatedAt;
   final bool cached;
 
+  // Check the forecast response before showing its values in the app.
   factory AiStatisticsForecast.fromJson(Map<String, dynamic> json) {
     final raw = json['forecast'];
     if (raw is! Map<String, dynamic>) {
       throw const FormatException('Forecast is missing.');
     }
+    // Reject a forecast number that is missing or outside the expected range.
     int requiredInt(String key) {
       final value = raw[key];
       if (value is! num) throw FormatException('$key is missing.');
       return value.round().clamp(0, 100);
     }
 
+    // Reject a missing or empty forecast text field.
     String requiredText(String key) {
       final value = raw[key];
       if (value is! String || value.trim().isEmpty) {
@@ -83,6 +86,7 @@ class StatisticsForecastException implements Exception {
   const StatisticsForecastException(this.message);
   final String message;
 
+  // Use the saved message when showing this error.
   @override
   String toString() => message;
 }
@@ -103,13 +107,14 @@ class AiStatisticsService {
   final http.Client _client;
   final Future<String?> Function() _tokenProvider;
 
+  // Send enough aggregate history to the AI endpoint and read its forecast.
   Future<AiStatisticsForecast> generate({
     required String elderlyId,
     required HealthStatistics statistics,
   }) async {
     if (statistics.doses < 5 || statistics.recordDays < 3) {
       throw const StatisticsForecastException(
-        'AI Forecast needs at least 3 recorded days and 5 dose records. The rule-based outlook remains available.',
+        'AI Forecast needs at least 3 recorded days and 5 dose records.',
       );
     }
     final token = await _tokenProvider();
@@ -147,11 +152,12 @@ class AiStatisticsService {
       rethrow;
     } catch (_) {
       throw const StatisticsForecastException(
-        'The AI service could not be reached. The rule-based outlook is still available.',
+        'The AI service could not be reached.',
       );
     }
   }
 
+  // Send daily totals and alert counts rather than names or medicine details.
   static Map<String, dynamic> buildPayload(
     String elderlyId,
     HealthStatistics statistics,
@@ -183,9 +189,11 @@ class AiStatisticsService {
     'fallStatuses': statistics.fallStatuses,
   };
 
+  // Get the signed-in user's token for the forecast request.
   static Future<String?> _firebaseToken() async =>
       FirebaseAuth.instance.currentUser?.getIdToken();
 
+  // Read the JSON response safely, including an empty or invalid body.
   static Map<String, dynamic>? _decode(String body) {
     try {
       final value = jsonDecode(body);
@@ -195,6 +203,7 @@ class AiStatisticsService {
     }
   }
 
+  // Format a day for the forecast request.
   static String _date(DateTime value) =>
       '${value.year.toString().padLeft(4, '0')}-'
       '${value.month.toString().padLeft(2, '0')}-'

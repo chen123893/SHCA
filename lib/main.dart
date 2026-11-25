@@ -25,14 +25,17 @@ import 'services/phone_monitoring_background.dart';
 import 'services/push_notification_service.dart';
 import 'services/watch_schedule_sync.dart';
 
+// Initialise Firebase before handling a push received in the background.
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 }
 
+// Start the phone fall-monitor worker in its background isolate.
 @pragma('vm:entry-point')
 Future<void> phoneMonitoringMain() => runPhoneMonitoring();
 
+// Set up Firebase, notifications and monitoring before opening the app.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -52,6 +55,7 @@ Future<void> main() async {
 class SHCAApp extends StatefulWidget {
   const SHCAApp({super.key});
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<SHCAApp> createState() => _SHCAAppState();
 }
@@ -61,6 +65,7 @@ class _SHCAAppState extends State<SHCAApp> {
   StreamSubscription<String>? _notificationTapSubscription;
   String? _activeMedicationTarget;
 
+  // Listen for medicine notification taps so they can open the alert screen.
   @override
   void initState() {
     super.initState();
@@ -77,6 +82,7 @@ class _SHCAAppState extends State<SHCAApp> {
     });
   }
 
+  // Open the matching dose alert only for the current elderly account.
   void _openMedicationAlert(String payload) {
     final target = MedicationNotificationTarget.fromPayload(payload);
     final navigator = _navigatorKey.currentState;
@@ -111,12 +117,14 @@ class _SHCAAppState extends State<SHCAApp> {
     );
   }
 
+  // Stop listening for medicine notification taps.
   @override
   void dispose() {
     unawaited(_notificationTapSubscription?.cancel());
     super.dispose();
   }
 
+  // Set up the app theme, routes and sign-in gate.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(

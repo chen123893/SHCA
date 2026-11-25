@@ -27,7 +27,9 @@ class StatisticsDay {
   int missed = 0;
   int unresolved = 0;
   int alerts = 0;
+  // Count all saved dose outcomes for this day.
   int get doses => taken + missed + unresolved;
+  // Calculate the taken percentage, leaving days with no doses empty.
   double? get completion => doses == 0 ? null : taken / doses * 100;
 }
 
@@ -75,6 +77,7 @@ class SmartInsights {
   final String confidenceDetail;
   final double confidenceValue;
 
+  // Summarise the saved dose and alert patterns using local rules.
   factory SmartInsights.fromStatistics(HealthStatistics statistics) {
     final recordLimit = math.min(statistics.days.length, 14);
     final doseLimit = math.min(statistics.days.length * 2, 28);
@@ -238,6 +241,7 @@ class SmartInsights {
     );
   }
 
+  // Compare two recent periods only when both have enough records.
   static _CompletionComparison? _completionComparison(
     HealthStatistics statistics,
   ) {
@@ -252,6 +256,7 @@ class SmartInsights {
       completedDays.length - window * 2,
       completedDays.length - window,
     );
+    // Calculate completion only for a period with enough saved doses.
     double? rate(List<StatisticsDay> days) {
       final doses = days.fold(0, (total, day) => total + day.doses);
       final recordDays = days.where((day) => day.doses > 0).length;
@@ -266,6 +271,7 @@ class SmartInsights {
     return _CompletionComparison(recentRate, previousRate, window);
   }
 
+  // Find the part of the day with the most saved alerts.
   static String _peakAlertPeriod(List<int> hours) {
     final labels = ['overnight', 'morning', 'afternoon', 'evening'];
     var peak = 0;
@@ -300,13 +306,21 @@ class HealthStatistics {
   final Map<String, int> fallStatuses;
   final List<int> alertHours;
   final int invalidRecords;
+  // Add up the doses marked taken in this period.
   int get taken => days.fold(0, (n, d) => n + d.taken);
+  // Add up the doses marked missed in this period.
   int get missed => days.fold(0, (n, d) => n + d.missed);
+  // Count doses that still have no final response.
   int get unresolved => days.fold(0, (n, d) => n + d.unresolved);
+  // Count taken, missed and unresolved doses together.
   int get doses => taken + missed + unresolved;
+  // Add up the possible-fall alerts in this period.
   int get alerts => days.fold(0, (n, d) => n + d.alerts);
+  // Count how many days contain saved medication records.
   int get recordDays => days.where((d) => d.doses > 0).length;
+  // Calculate the taken percentage across the selected period.
   double? get completion => doses == 0 ? null : taken / doses * 100;
+  // Build the local pattern summary from these statistics.
   SmartInsights get smartInsights => SmartInsights.fromStatistics(this);
 
   /// Historical baseline, not a clinical model. Excludes the unfinished day.
@@ -333,6 +347,7 @@ class HealthStatistics {
     );
   }
 
+  // Group dose and fall records into daily totals for the selected period.
   factory HealthStatistics.calculate({
     required DateTime now,
     required int periodDays,
@@ -405,10 +420,12 @@ class HealthStatistics {
     );
   }
 
+  // Keep the latest dose response when records overlap.
   static bool _prefer(StatisticsDose a, StatisticsDose b) {
     final aTime = a.actionAt?.millisecondsSinceEpoch ?? 0;
     final bTime = b.actionAt?.millisecondsSinceEpoch ?? 0;
     if (aTime != bTime) return aTime > bTime;
+    // Break a timestamp tie by preferring a completed response.
     int rank(String status) => switch (status) {
       'taken' => 3,
       'missed' => 2,
@@ -418,8 +435,10 @@ class HealthStatistics {
     return rank(a.status) > rank(b.status);
   }
 
+  // Remove the time so dates can be compared by day.
   static DateTime dateOnly(DateTime value) =>
       DateTime(value.year, value.month, value.day);
+  // Use a consistent date key when grouping records by day.
   static String dateKey(DateTime value) =>
       '${value.year}-${value.month}-${value.day}';
 }

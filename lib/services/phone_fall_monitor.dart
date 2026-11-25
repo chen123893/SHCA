@@ -31,9 +31,11 @@ class PhoneFallMonitor extends ChangeNotifier implements ActivityMonitor {
     message: 'Turn on fall detection to monitor in the background.',
   );
 
+  // Read the phone monitor's latest status.
   @override
   ActivitySnapshot get snapshot => _snapshot;
 
+  // Copy the background monitor's latest result into the screen state.
   void _apply(Map<dynamic, dynamic> value) {
     enabled = value['enabled'] == true;
     deliveryEventId = value['deliveryEventId'] as String?;
@@ -64,6 +66,7 @@ class PhoneFallMonitor extends ChangeNotifier implements ActivityMonitor {
     notifyListeners();
   }
 
+  // Connect to the background phone monitoring service.
   @override
   Future<void> start() async {
     _subscription ??= events.receiveBroadcastStream().listen((dynamic value) {
@@ -85,6 +88,7 @@ class PhoneFallMonitor extends ChangeNotifier implements ActivityMonitor {
     }
   }
 
+  // Check the permission needed to show the fall warning over other apps.
   Future<void> _ensureAlarmDisplayAccess() async {
     final access = await methods.invokeMapMethod('getAlarmDisplayAccess') ?? {};
     if (access['appearOnTop'] != true) {
@@ -113,6 +117,7 @@ class PhoneFallMonitor extends ChangeNotifier implements ActivityMonitor {
     }
   }
 
+  // Save the user's choice and start or stop phone monitoring.
   Future<void> setEnabled(bool value) async {
     if (value) await _ensureAlarmDisplayAccess();
     final state = await methods.invokeMapMethod('setEnabled', {
@@ -121,21 +126,25 @@ class PhoneFallMonitor extends ChangeNotifier implements ActivityMonitor {
     if (state != null) _apply(state);
   }
 
+  // Pass the user's fall response to the background service.
   Future<void> respondToFall({required String eventId, required bool send}) =>
       methods.invokeMethod<void>('respondToFall', {
         'eventId': eventId,
         'send': send,
       });
 
+  // Disable the phone monitoring service.
   @override
   Future<void> stop() => setEnabled(false);
 
+  // Tell the monitor that the current possible fall has been acknowledged.
   @override
   void acknowledgePossibleFall() {
     final id = pendingFallId;
     if (id != null) unawaited(respondToFall(eventId: id, send: false));
   }
 
+  // Stop listening to background status updates.
   @override
   void dispose() {
     unawaited(_subscription?.cancel());

@@ -17,11 +17,13 @@ import java.util.concurrent.TimeUnit
 
 /** Durable background processing; never depends on a Flutter screen being open. */
 class WatchActionWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
+    // Save a queued watch action and apply any matching phone alarm update.
     override fun doWork(): Result {
         val payload = JSONObject(inputData.getString("payload") ?: return Result.failure())
         val id = payload.optString("eventId")
         val node = inputData.getString("node") ?: ""
         val medicine = inputData.getBoolean("medicine", false)
+        // Return the saved action's result to the watch.
         fun ack(status: String, message: String) = WatchBridge.acknowledge(applicationContext, node, id, status, message, medicine)
         try {
             FirebaseApp.initializeApp(applicationContext)
@@ -82,6 +84,14 @@ class WatchActionWorker(context: Context, params: WorkerParameters) : Worker(con
                     tx.set(recordRef, values, com.google.firebase.firestore.SetOptions.merge())
                     null
                 }, 25, TimeUnit.SECONDS)
+                val saved = Tasks.await(recordRef.get(Source.CACHE), 5, TimeUnit.SECONDS)
+                MedicationAlarmScheduler.updateRecord(applicationContext, JSONObject(mapOf(
+                    "elderlyId" to user.uid, "medicationId" to medicationId,
+                    "occurrenceId" to occurrenceId, "scheduledAt" to scheduledAt,
+                    "status" to saved.getString("status"),
+                    "actionAt" to (saved.getTimestamp("actionAt")?.toDate()?.time ?: 0L),
+                    "remindAt" to (saved.getTimestamp("snoozedUntil")?.toDate()?.time ?: 0L)
+                )))
                 ack("completed", "Medicine response saved on the phone.")
                 return Result.success()
             }
@@ -166,6 +176,7 @@ class WatchActionWorker(context: Context, params: WorkerParameters) : Worker(con
         }
     }
     companion object {
+        // Queue a watch action under its event ID so it can retry safely.
         fun enqueue(context: Context, payload: String, node: String, medicine: Boolean) {
             val id = JSONObject(payload).optString("eventId")
             val builder = OneTimeWorkRequestBuilder<WatchActionWorker>()

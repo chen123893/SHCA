@@ -8,6 +8,7 @@ class MedicationEmailException implements Exception {
 
   final String message;
 
+  // Use the saved message when showing this error.
   @override
   String toString() => message;
 }
@@ -45,6 +46,7 @@ class MedicationEmailService {
 
   final String baseUrl;
 
+  // Ask the backend to email caregivers about this missed dose.
   Future<MedicationEmailResult> sendMissedReminder({
     required String elderlyId,
     required String medicationId,
@@ -56,6 +58,7 @@ class MedicationEmailService {
     occurrenceDate: occurrenceDate,
   );
 
+  // Ask the backend to email caregivers about this medicine's low stock.
   Future<MedicationEmailResult> sendLowStockReminder({
     required String elderlyId,
     required String medicationId,
@@ -67,6 +70,7 @@ class MedicationEmailService {
     occurrenceDate: occurrenceDate,
   );
 
+  // Authenticate the request and read the caregiver email delivery result.
   Future<MedicationEmailResult> _send({
     required String path,
     required String elderlyId,
@@ -117,6 +121,7 @@ class MedicationEmailService {
     );
   }
 
+  // Build the backend URL for this request.
   Uri _endpoint(String path) {
     final trimmed = baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
     if (trimmed.isEmpty) {
@@ -127,6 +132,7 @@ class MedicationEmailService {
     return Uri.parse('$trimmed$path');
   }
 
+  // Read the JSON response safely, including an empty or invalid body.
   Map<String, dynamic>? _decode(String body) {
     try {
       final value = jsonDecode(body);
@@ -136,6 +142,7 @@ class MedicationEmailService {
     }
   }
 
+  // Use a consistent date key when saving or looking up records.
   String _dateKey(DateTime value) =>
       '${value.year.toString().padLeft(4, '0')}-'
       '${value.month.toString().padLeft(2, '0')}-'
