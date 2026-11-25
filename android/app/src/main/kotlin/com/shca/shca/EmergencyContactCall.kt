@@ -11,9 +11,11 @@ import android.util.Log
 internal object EmergencyContactCall {
     private const val EVENT_WINDOW_MS = 15 * 60_000L
 
+    // Remove phone-number formatting before starting the emergency call.
     fun normalize(phone: String?): String? =
         phone?.trim()?.replace(Regex("[ ()-]"), "")?.takeIf { it.matches(Regex("[+]?[0-9]{7,15}")) }
 
+    // Check the contact and call permission before requesting a direct phone call.
     @Synchronized
     fun request(context: Context, phone: String?, eventId: String? = null, occurredAt: Long = 0): Boolean {
         val number = normalize(phone) ?: return false

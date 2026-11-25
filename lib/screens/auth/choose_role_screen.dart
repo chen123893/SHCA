@@ -6,6 +6,7 @@ import 'package:shca/services/care_link_service.dart';
 class ChooseRoleScreen extends StatefulWidget {
   const ChooseRoleScreen({super.key});
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<ChooseRoleScreen> createState() => _ChooseRoleScreenState();
 }
@@ -18,6 +19,7 @@ class _ChooseRoleScreenState extends State<ChooseRoleScreen> {
   String? _selectedRole;
   bool _isLoading = false;
 
+  // Save the chosen caregiver or elderly role and continue account setup.
   Future<void> _selectAndSubmitRole(String role) async {
     setState(() {
       _selectedRole = role;
@@ -75,6 +77,7 @@ class _ChooseRoleScreenState extends State<ChooseRoleScreen> {
     }
   }
 
+  // Show the caregiver and elderly role choices.
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -206,6 +209,7 @@ class _ChooseRoleScreenState extends State<ChooseRoleScreen> {
     );
   }
 
+  // Show a selectable role with its description and icon.
   Widget _buildRoleCard({
     required String roleValue,
     required String title,

@@ -5,7 +5,9 @@ import com.google.android.gms.wearable.*
 import org.json.JSONObject
 
 object WatchDataStore {
+    // Read the saved watch data-layer state and acknowledgements.
     private fun prefs(c: Context) = c.getSharedPreferences("shca_watch_bridge_v2", Context.MODE_PRIVATE)
+    // Route incoming phone data to the matching watch feature.
     fun receive(c: Context, item: DataItem) {
         val path = item.uri.path ?: return
         if (path != Paths.PHONE_STATE && path != Paths.MEDICATION &&
@@ -35,6 +37,7 @@ object WatchDataStore {
             else -> acceptAck(c, map.getString("json") ?: "{}", path.startsWith(Paths.MEDICATION_ACK))
         }
     }
+    // Read an action acknowledgement and apply it to the pending watch response.
     fun acceptAck(c: Context, text: String, medicine: Boolean) {
         val json = try { JSONObject(text) } catch (_: Exception) { return }
         val id = json.optString("eventId")
@@ -50,6 +53,7 @@ object WatchDataStore {
         WatchEventBus.emit(mapOf("type" to if (medicine) "medication_ack" else "emergency_ack",
             "eventId" to id, "status" to json.optString("status"), "message" to json.optString("message")))
     }
+    // Convert the saved acknowledgement into values the Flutter watch app can read.
     fun ackMap(c: Context): Map<String, Any?>? {
         val json = try { JSONObject(prefs(c).getString("emergencyAck", "{}")) } catch (_: Exception) { return null }
         if (!json.has("eventId")) return null
@@ -57,9 +61,11 @@ object WatchDataStore {
     }
 }
 class WearDataLayerService : WearableListenerService() {
+    // Handle changed SHCA data items received from the paired phone.
     override fun onDataChanged(events: DataEventBuffer) {
         events.forEach { if (it.type == DataEvent.TYPE_CHANGED) WatchDataStore.receive(this, it.dataItem) }
     }
+    // Handle SHCA phone messages even when the Flutter watch screen is closed.
     override fun onMessageReceived(event: MessageEvent) {
         if (event.path == WatchPhoneSignIn.QUERY || event.path == WatchPhoneSignIn.APPROVE) {
             WatchPhoneSignIn.receive(this, event)

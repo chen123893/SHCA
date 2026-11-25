@@ -16,11 +16,13 @@ from seed_medication_demo import Firestore, scalar, fingerprint
 ZONE = ZoneInfo('Asia/Kuala_Lumpur')
 
 
+# Read the saved timestamp as a local calendar day for the history move.
 def local_day(document):
     value = document['fields']['scheduledAt']['timestampValue']
     return datetime.fromisoformat(value.replace('Z', '+00:00')).astimezone(ZONE).date().isoformat()
 
 
+# Move the selected demo history after checking the command-line options.
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--project', required=True)

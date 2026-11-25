@@ -25,6 +25,7 @@ class WatchScheduleSync {
   List<MedicationSchedule> _items = [];
   List<MedicationRecord> _doses = [];
 
+  // Watch the signed-in account so medicine data stays in sync.
   void start() {
     if (!Platform.isAndroid || _auth != null) return;
     _auth = FirebaseAuth.instance.authStateChanges().listen(_onUser);
@@ -34,6 +35,7 @@ class WatchScheduleSync {
     );
   }
 
+  // Cancel the account, profile and medication listeners.
   Future<void> stop() async {
     _timer?.cancel();
     _timer = null;
@@ -45,6 +47,7 @@ class WatchScheduleSync {
     _auth = null;
   }
 
+  // Switch the listeners to the current elderly account.
   Future<void> _onUser(User? user) async {
     final generation = ++_generation;
     await _profile?.cancel();
@@ -123,6 +126,7 @@ class WatchScheduleSync {
         });
   }
 
+  // Send the current day's dose list to the watch when it changes.
   Future<void> _publish({bool forceClear = false}) async {
     final uid = _uid, role = _role;
     try {

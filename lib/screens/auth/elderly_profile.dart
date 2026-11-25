@@ -30,6 +30,7 @@ class ElderlyProfileScreen extends StatefulWidget {
   final CareLinkRepository? careLinkRepository;
   final AppSessionService? sessionService;
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<ElderlyProfileScreen> createState() => _ElderlyProfileScreenState();
 }
@@ -58,6 +59,7 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
   bool? _fallSmsEnabled;
   bool _changingFallSms = false;
 
+  // Read whether automatic emergency SMS is enabled on this phone.
   Future<void> _loadFallSms() async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
     try {
@@ -70,6 +72,7 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
     }
   }
 
+  // Request SMS permission if needed and save the emergency SMS preference.
   Future<void> _setFallSms(bool enabled) async {
     setState(() => _changingFallSms = true);
     try {
@@ -92,6 +95,7 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
 
   String? _error;
 
+  // Prepare the edit fields and load profile, SMS and pairing settings.
   @override
   void initState() {
     super.initState();
@@ -104,6 +108,7 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
     unawaited(_loadFallSms());
   }
 
+  // release the controllers when this page is removed.
   @override
   void dispose() {
     _nameController.dispose();
@@ -112,6 +117,7 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
     super.dispose();
   }
 
+  // Load the elderly profile and pairing code into the page.
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -151,6 +157,7 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
     }
   }
 
+  // Open the birth-date picker and update the selected date.
   Future<void> _chooseBirthDate() async {
     final now = DateTime.now();
     final selected = await showDatePicker(
@@ -163,6 +170,7 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
     if (selected != null) setState(() => _dateOfBirth = selected);
   }
 
+  // Validate and save the elderly profile and emergency contact.
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     if (_dateOfBirth == null) {
@@ -206,6 +214,7 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
     }
   }
 
+  // Sign out and return to the login screen.
   Future<void> _signOut() async {
     if (_signingOut) return;
     setState(() => _signingOut = true);
@@ -223,6 +232,7 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
     }
   }
 
+  // Open the password change form.
   Future<void> _openChangePassword() async {
     final changed = await Navigator.push<bool>(
       context,
@@ -239,6 +249,7 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
     }
   }
 
+  // Return to the home screen.
   void _goHome() {
     if (Navigator.canPop(context)) {
       Navigator.pop(context, true);
@@ -247,6 +258,7 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
     }
   }
 
+  // Open the elderly monitoring page.
   void _openMonitoring() {
     final monitor = widget.activityMonitor ?? phoneActivityMonitor();
     Navigator.pushReplacement<void, bool>(
@@ -258,6 +270,7 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
     );
   }
 
+  // Show the elderly profile, emergency contact and pairing settings.
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -281,6 +294,7 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
     );
   }
 
+  // Choose between the elderly profile view and its edit form.
   Widget _buildBody() {
     if (_loading) {
       return const Center(
@@ -405,6 +419,7 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
     );
   }
 
+  // Show the saved personal and emergency contact details.
   Widget _buildProfileInformation() {
     final age = _ageFromDate(_dateOfBirth);
     return Column(
@@ -500,6 +515,7 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
     );
   }
 
+  // Show the pairing code that can be shared with a caregiver.
   Widget _linkCodeRow() {
     return Padding(
       padding: const EdgeInsets.only(top: 12),
@@ -544,6 +560,7 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
     );
   }
 
+  // Show the editable personal and emergency contact fields.
   Widget _buildEditForm() {
     return Form(
       key: _formKey,
@@ -669,6 +686,7 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
     );
   }
 
+  // Put the saved profile values back into the edit fields.
   void _restoreControllers() {
     final profile = _profile!;
     _nameController.text = profile.fullName;
@@ -678,9 +696,11 @@ class _ElderlyProfileScreenState extends State<ElderlyProfileScreen> {
     _gender = profile.gender.isEmpty ? 'Female' : profile.gender;
   }
 
+  // Check that a required field has a value.
   String? _required(String? value) =>
       value == null || value.trim().isEmpty ? 'This field is required.' : null;
 
+  // Show a short message at the bottom of the screen.
   void _showMessage(String message) {
     ScaffoldMessenger.of(
       context,
@@ -694,6 +714,7 @@ class _ProfileSection extends StatelessWidget {
   final String title;
   final List<Widget> children;
 
+  // Keep related elderly profile details under one heading.
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -734,6 +755,7 @@ class _InfoRow extends StatelessWidget {
   final String value;
   final Color? valueColor;
 
+  // Show one saved detail beside its label.
   @override
   Widget build(BuildContext context) => Row(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -765,6 +787,7 @@ class _InfoRow extends StatelessWidget {
   );
 }
 
+// Work out the age from the saved birth date.
 int? _ageFromDate(DateTime? birthDate) {
   if (birthDate == null) return null;
   final today = DateTime.now();
@@ -776,11 +799,13 @@ int? _ageFromDate(DateTime? birthDate) {
   return age;
 }
 
+// Store the date as year-month-day.
 String _formatIsoDate(DateTime value) =>
     '${value.year.toString().padLeft(4, '0')}-'
     '${value.month.toString().padLeft(2, '0')}-'
     '${value.day.toString().padLeft(2, '0')}';
 
+// Show the birth date in a readable format.
 String _formatDisplayDate(DateTime value) =>
     '${value.day.toString().padLeft(2, '0')}/'
     '${value.month.toString().padLeft(2, '0')}/${value.year}';

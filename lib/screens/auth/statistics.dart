@@ -15,6 +15,7 @@ class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({super.key, this.repository, this.forecastService});
   final HealthStatisticsRepository? repository;
   final AiStatisticsService? forecastService;
+  // Keep this screen's changing values in its own state object.
   @override
   State<StatisticsScreen> createState() => _StatisticsScreenState();
 }
@@ -31,6 +32,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   Future<StatisticsHistory>? _history;
   Future<AiStatisticsForecast>? _aiForecast;
 
+  // Load the linked accounts and the initial statistics request.
   @override
   void initState() {
     super.initState();
@@ -39,6 +41,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     _loadAccounts();
   }
 
+  // Load the caregiver's linked elderly accounts for the statistics selector.
   Future<void> _loadAccounts() async {
     setState(() {
       _loadingAccounts = true;
@@ -68,6 +71,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     }
   }
 
+  // Start a new statistics request for the selected account and period.
   void _reload() {
     final id = _elderlyId;
     if (id == null) {
@@ -85,6 +89,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
+  // Reload the visible statistics when the page is refreshed.
   Future<void> _refresh() async {
     setState(_reload);
     try {
@@ -94,6 +99,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     }
   }
 
+  // Create and share a PDF of the currently selected statistics.
   Future<void> _exportPdf(StatisticsHistory visibleHistory) async {
     final selectedPeriod = await showDialog<int>(
       context: context,
@@ -171,6 +177,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     }
   }
 
+  // Open the selected caregiver page from the bottom navigation.
   void _openCaregiverPage(bool medicine) {
     final person = _people
         .where((person) => person.id == _elderlyId)
@@ -195,6 +202,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
+  // Show the account and period selectors with the loaded statistics.
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: elderlyPageBackground,
@@ -363,6 +371,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           ),
   );
 
+  // Show a loading, empty or error message in the page's card style.
   Widget _message(String message, VoidCallback retry) => Padding(
     padding: const EdgeInsets.all(24),
     child: Column(
@@ -380,6 +389,7 @@ class StatisticsDashboard extends StatelessWidget {
   const StatisticsDashboard({super.key, required this.statistics});
   final HealthStatistics statistics;
 
+  // Show the selected period's medication and fall-alert statistics.
   @override
   Widget build(BuildContext context) {
     final data = statistics;
@@ -582,6 +592,7 @@ class StatisticsDashboard extends StatelessWidget {
     );
   }
 
+  // Show one labelled statistic in the dashboard.
   Widget _metric(String label, String value) => Container(
     width: 148,
     padding: const EdgeInsets.all(16),
@@ -607,6 +618,7 @@ class StatisticsDashboard extends StatelessWidget {
   );
 }
 
+// Keep each statistics section in the same card layout.
 Widget _card(String title, Widget content) => elderlySectionCard(
   child: Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -626,6 +638,7 @@ class SmartInsightsPanel extends StatelessWidget {
 
   final HealthStatistics statistics;
 
+  // Show the pattern summary calculated from saved records on this device.
   @override
   Widget build(BuildContext context) {
     final insights = statistics.smartInsights;
@@ -783,6 +796,7 @@ class GeminiForecastPanel extends StatelessWidget {
   final Future<AiStatisticsForecast>? forecast;
   final VoidCallback onRetry;
 
+  // Load and display the AI forecast or its unavailable state.
   @override
   Widget build(BuildContext context) => Container(
     key: const Key('gemini-forecast-panel'),
@@ -869,6 +883,7 @@ class _GeminiUnavailable extends StatelessWidget {
   final Object? error;
   final VoidCallback onRetry;
 
+  // Explain why the AI forecast is not available.
   @override
   Widget build(BuildContext context) {
     final message = error is StatisticsForecastException
@@ -895,6 +910,7 @@ class _GeminiForecastBody extends StatelessWidget {
 
   final AiStatisticsForecast forecast;
 
+  // Show the forecast values, explanation and suggested caregiver actions.
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -969,6 +985,7 @@ class _GeminiForecastBody extends StatelessWidget {
     ],
   );
 
+  // Show one value from the AI forecast with its label.
   static Widget _forecastMetric(String label, String value) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
     decoration: BoxDecoration(
@@ -995,6 +1012,7 @@ class _GeminiForecastBody extends StatelessWidget {
     ),
   );
 
+  // Turn a forecast category into a readable label.
   static String _friendly(String value) => value
       .split('_')
       .map(
@@ -1010,6 +1028,7 @@ class _SmartInsightRow extends StatelessWidget {
 
   final SmartInsight insight;
 
+  // Show one local insight with its severity icon and explanation.
   @override
   Widget build(BuildContext context) {
     final (color, background, icon) = switch (insight.tone) {

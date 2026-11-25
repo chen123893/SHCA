@@ -111,6 +111,7 @@ class WindowedDataset:
     audit: dict
 
 
+# Read the activity, subject and recording IDs from a MobiAct filename.
 def _parse_mobiact_name(path: Path) -> tuple[str, str, str, str] | None:
     parts = path.stem.split("_")
     if len(parts) != 4:
@@ -121,6 +122,7 @@ def _parse_mobiact_name(path: Path) -> tuple[str, str, str, str] | None:
     return activity, sensor, subject, trial
 
 
+# Find supported MobiAct recordings and attach their activity labels.
 def discover_mobiact(root: Path) -> tuple[list[Recording], dict]:
     groups: dict[tuple[str, str, str], dict[str, Path]] = defaultdict(dict)
     ignored = 0
@@ -163,6 +165,7 @@ def discover_mobiact(root: Path) -> tuple[list[Recording], dict]:
     return recordings, audit
 
 
+# Read the annotated fall times used to label WEDA-FALL windows.
 def _read_fall_intervals(path: Path) -> dict[str, tuple[float, float]]:
     intervals: dict[str, tuple[float, float]] = {}
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
@@ -171,6 +174,7 @@ def _read_fall_intervals(path: Path) -> dict[str, tuple[float, float]]:
     return intervals
 
 
+# Find matching WEDA-FALL sensor files and their fall annotations.
 def discover_wedafall(root: Path) -> tuple[list[Recording], dict]:
     freq_dir = root / "dataset" / "50Hz"
     intervals_path = root / "dataset" / "fall_timestamps.csv"
@@ -227,6 +231,7 @@ def discover_wedafall(root: Path) -> tuple[list[Recording], dict]:
     return recordings, audit
 
 
+# Remove invalid readings and put the sensor samples in time order.
 def _clean_sensor_array(values: np.ndarray, timestamp_divisor: float) -> tuple[np.ndarray, np.ndarray, dict]:
     original_rows = len(values)
     values = values[np.all(np.isfinite(values), axis=1)]
@@ -256,6 +261,7 @@ def _clean_sensor_array(values: np.ndarray, timestamp_divisor: float) -> tuple[n
     }
 
 
+# Read the MobiAct sensor columns into the common recording format.
 def read_mobiact_sensor(path: Path) -> tuple[np.ndarray, np.ndarray, dict]:
     # MobiAct files contain an uncommented ``@DATA`` marker, so conventional
     # CSV readers infer a one-column table. Parse only numeric four-value rows.
@@ -275,12 +281,14 @@ def read_mobiact_sensor(path: Path) -> tuple[np.ndarray, np.ndarray, dict]:
     return _clean_sensor_array(values, timestamp_divisor=1e9)
 
 
+# Read and combine the WEDA-FALL acceleration and gyroscope recordings.
 def read_wedafall_sensor(path: Path) -> tuple[np.ndarray, np.ndarray, dict]:
     frame = pd.read_csv(path, usecols=[0, 1, 2, 3])
     values = frame.apply(pd.to_numeric, errors="coerce").to_numpy(dtype=np.float64)
     return _clean_sensor_array(values, timestamp_divisor=1.0)
 
 
+# Measure the gap from each target time to its nearest real sensor sample.
 def _nearest_sample_distance(grid: np.ndarray, timestamps: np.ndarray) -> np.ndarray:
     right = np.searchsorted(timestamps, grid, side="left")
     left = np.clip(right - 1, 0, len(timestamps) - 1)
@@ -288,6 +296,7 @@ def _nearest_sample_distance(grid: np.ndarray, timestamps: np.ndarray) -> np.nda
     return np.minimum(np.abs(grid - timestamps[left]), np.abs(grid - timestamps[right]))
 
 
+# Align the sensor readings to the target sampling rate without crossing large gaps.
 def _resample_recording(recording: Recording) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict]:
     reader = read_mobiact_sensor if recording.dataset == "phone_mobiact" else read_wedafall_sensor
     acc_t, acc_xyz, acc_stats = reader(recording.acc_path)
@@ -322,12 +331,14 @@ def _resample_recording(recording: Recording) -> tuple[np.ndarray, np.ndarray, n
     return grid, six_axes, valid, stats
 
 
+# Add total acceleration and angular-speed features to the sensor axes.
 def add_magnitude_features(six_axes: np.ndarray) -> np.ndarray:
     acc_mag = np.linalg.norm(six_axes[:, 0:3], axis=1, keepdims=True)
     gyro_mag = np.linalg.norm(six_axes[:, 3:6], axis=1, keepdims=True)
     return np.concatenate([six_axes, acc_mag, gyro_mag], axis=1).astype(np.float32)
 
 
+# Choose sliding-window starts at the requested stride.
 def _regular_window_starts(length: int) -> Iterable[int]:
     return range(0, length - WINDOW_SIZE + 1, STEP_SIZE)
 
@@ -350,6 +361,7 @@ def _mobiact_fall_window_starts(six_axes: np.ndarray) -> list[int]:
     return sorted(set(starts))
 
 
+# Choose extra windows around the annotated fall so the event is represented.
 def _wedafall_positive_window_starts(recording: Recording, grid: np.ndarray) -> list[int]:
     if recording.fall_start_s is None or recording.fall_end_s is None:
         return []
@@ -366,6 +378,7 @@ def _wedafall_positive_window_starts(recording: Recording, grid: np.ndarray) -> 
     return starts
 
 
+# Turn labelled recordings into sensor windows for model training.
 def build_windowed_dataset(
     dataset: str,
     root: Path,
@@ -464,6 +477,7 @@ def build_windowed_dataset(
     )
 
 
+# Count the recordings, windows and labels in the prepared dataset.
 def _summary(values: list[float]) -> dict[str, float]:
     array = np.asarray(values, dtype=np.float64)
     return {
@@ -475,6 +489,7 @@ def _summary(values: list[float]) -> dict[str, float]:
     }
 
 
+# Keep each subject in one split to avoid sharing people across train and test.
 def make_subject_split(data: WindowedDataset, dataset: str, seed: int = 42) -> dict[str, list[str]]:
     all_labels = set(data.labels_ordered)
     labels_by_subject: dict[str, set[str]] = defaultdict(set)
@@ -527,6 +542,7 @@ def make_subject_split(data: WindowedDataset, dataset: str, seed: int = 42) -> d
     return split
 
 
+# Get the window indices belonging to each saved subject split.
 def split_indices(data: WindowedDataset, split: dict[str, list[str]]) -> dict[str, np.ndarray]:
     return {
         name: np.flatnonzero(np.isin(data.subjects, subjects))
@@ -534,6 +550,7 @@ def split_indices(data: WindowedDataset, split: dict[str, list[str]]) -> dict[st
     }
 
 
+# Convert a recording's metadata into values that can be saved as JSON.
 def serializable_recording(recording: Recording) -> dict:
     result = asdict(recording)
     result["acc_path"] = str(recording.acc_path)

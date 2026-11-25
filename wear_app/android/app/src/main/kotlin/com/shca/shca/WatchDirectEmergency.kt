@@ -20,6 +20,7 @@ data class WatchIdentity(val keyId: String, val publicKey: String)
 
 object WatchDeviceIdentity {
 
+    // Load or create the signing key used by this watch account.
     fun getOrCreate(context: Context): WatchIdentity {
         val alias = WatchIdentityScope.aliasFor(WatchSession.userId(context))
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
@@ -49,6 +50,7 @@ object WatchDeviceIdentity {
         )
     }
 
+    // Sign the watch emergency details before sending them to the backend.
     fun sign(context: Context, message: String): String {
         val alias = WatchIdentityScope.aliasFor(WatchSession.userId(context))
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
@@ -69,10 +71,12 @@ object DirectEmergencySender {
 
     private val sending = mutableSetOf<String>()
 
+    // Clear pending direct emergency deliveries for the selected watch session.
     fun clearPending(context: Context) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
     }
 
+    // Prepare and attempt a direct watch emergency delivery.
     fun send(context: Context, payload: JSONObject) {
         val appContext = context.applicationContext
         val eventId = payload.optString("eventId")
@@ -90,6 +94,7 @@ object DirectEmergencySender {
         sendPending(appContext, eventId, payload)
     }
 
+    // Retry saved emergencies that still qualify for delivery.
     fun retryPending(context: Context) {
         val preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val pending = try {
@@ -108,6 +113,7 @@ object DirectEmergencySender {
         }
     }
 
+    // Send the stored emergency request and handle its response.
     private fun sendPending(appContext: Context, eventId: String, payload: JSONObject) {
         synchronized(this) { if (!sending.add(eventId)) return }
         Thread {
@@ -205,6 +211,7 @@ object DirectEmergencySender {
         }.start()
     }
 
+    // Remove an emergency from the retry queue once it has been handled.
     private fun removePending(context: Context, eventId: String) {
         synchronized(this) {
             val preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -218,6 +225,7 @@ object DirectEmergencySender {
         }
     }
 
+    // Return the emergency delivery result to the watch interface.
     private fun acknowledge(
         context: Context,
         eventId: String,

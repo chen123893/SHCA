@@ -21,6 +21,7 @@ class StatisticsSeriesChart extends StatelessWidget {
   final bool percent;
   final bool bars;
 
+  // Size the daily chart and provide the values to its painter.
   @override
   Widget build(BuildContext context) {
     final observed = values.whereType<double>().toList();
@@ -105,6 +106,7 @@ class _SeriesPainter extends CustomPainter {
   final double maxValue;
   final bool bars;
 
+  // Draw the daily series using the available chart size and values.
   @override
   void paint(Canvas canvas, Size size) {
     final grid = Paint()
@@ -148,6 +150,7 @@ class _SeriesPainter extends CustomPainter {
     }
   }
 
+  // Redraw the series only when its data or colours change.
   @override
   bool shouldRepaint(_SeriesPainter oldDelegate) =>
       oldDelegate.values != values ||
@@ -164,6 +167,7 @@ class StatisticsBreakdown extends StatelessWidget {
   final Map<String, int> values;
   final List<Color> colors;
 
+  // Show the category counts beside their donut chart.
   @override
   Widget build(BuildContext context) {
     final total = values.values.fold(0, (a, b) => a + b);
@@ -233,6 +237,7 @@ class _DonutPainter extends CustomPainter {
   _DonutPainter(this.values, this.colors);
   final List<int> values;
   final List<Color> colors;
+  // Draw each category as its share of the donut chart.
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Rect.fromLTWH(12, 12, size.width - 24, size.height - 24);
@@ -250,6 +255,7 @@ class _DonutPainter extends CustomPainter {
     }
   }
 
+  // Redraw the donut when its category values change.
   @override
   bool shouldRepaint(_DonutPainter oldDelegate) =>
       oldDelegate.values != values || oldDelegate.colors != colors;

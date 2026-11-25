@@ -17,11 +17,13 @@ import java.util.concurrent.TimeUnit
 
 /** Durable background processing; never depends on a Flutter screen being open. */
 class WatchActionWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
+    // Save a queued watch response on the phone and acknowledge the result.
     override fun doWork(): Result {
         val payload = JSONObject(inputData.getString("payload") ?: return Result.failure())
         val id = payload.optString("eventId")
         val node = inputData.getString("node") ?: ""
         val medicine = inputData.getBoolean("medicine", false)
+        // Return the saved action's result to the watch.
         fun ack(status: String, message: String) = WatchBridge.acknowledge(applicationContext, node, id, status, message, medicine)
         try {
             FirebaseApp.initializeApp(applicationContext)
@@ -166,6 +168,7 @@ class WatchActionWorker(context: Context, params: WorkerParameters) : Worker(con
         }
     }
     companion object {
+        // Queue a watch action under its event ID so it can retry safely.
         fun enqueue(context: Context, payload: String, node: String, medicine: Boolean) {
             val id = JSONObject(payload).optString("eventId")
             val builder = OneTimeWorkRequestBuilder<WatchActionWorker>()

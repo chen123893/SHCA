@@ -15,8 +15,10 @@ object WatchPhoneSignIn {
     private const val PREFS = "shca_watch_phone_sign_in"
     private val random = SecureRandom()
     private val busy = AtomicBoolean(false)
+    // Read the saved phone-assisted watch sign-in request.
     private fun prefs(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+    // Create a short-lived watch code and announce the request to the phone.
     @Synchronized
     fun start(c: Context, renew: Boolean = false): Map<String, Any?> {
         if (WatchSession.isSignedIn(c)) return mapOf("error" to "This watch is already signed in.")
@@ -31,9 +33,11 @@ object WatchPhoneSignIn {
         return mapOf("code" to p.getString("code", ""), "expiresAt" to p.getLong("expiresAt", 0))
     }
 
+    // Clear the current phone-assisted sign-in request.
     @Synchronized
     fun cancel(c: Context) { prefs(c).edit().clear().apply() }
 
+    // Handle the phone's query or approval for this watch sign-in.
     fun receive(c: Context, event: MessageEvent) {
         val json = try { JSONObject(String(event.data, Charsets.UTF_8)) } catch (_: Exception) { return }
         if (event.path == QUERY) {
@@ -50,9 +54,11 @@ object WatchPhoneSignIn {
         val p = prefs(c)
         val nonce = json.optString("nonce")
         val token = json.optString("customToken")
+        // Check the pending sign-in code and its expiry time.
         fun valid() = !WatchSession.isSignedIn(c) && nonce.matches(Regex("[a-f0-9]{64}")) &&
             nonce == p.getString("nonce", "") && json.optString("code") == p.getString("code", "") &&
             p.getLong("expiresAt", 0) > System.currentTimeMillis()
+        // Send the sign-in query or approval result back to the requesting phone.
         fun reply(result: Map<String, Any?>) {
             val data = JSONObject(result).put("nonce", nonce)
             Wearable.getMessageClient(c).sendMessage(event.sourceNodeId, RESULT, data.toString().toByteArray())

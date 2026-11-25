@@ -23,6 +23,7 @@ object WatchSignInBridge {
     private val approvals = ConcurrentHashMap<String, Pending>()
     private val main = Handler(Looper.getMainLooper())
 
+    // Match a watch sign-in reply to the pending request from that device.
     fun receive(event: MessageEvent): Boolean {
         if (event.path != REQUEST && event.path != RESULT) return false
         val json = try { JSONObject(String(event.data, Charsets.UTF_8)) } catch (_: Exception) { return true }
@@ -31,6 +32,7 @@ object WatchSignInBridge {
         return true
     }
 
+    // Find reachable watches waiting for phone-assisted sign-in.
     fun find(context: Context, result: MethodChannel.Result) {
         Thread {
             val ids = mutableListOf<String>()
@@ -64,6 +66,7 @@ object WatchSignInBridge {
         }.start()
     }
 
+    // Send the matching watch code and Firebase custom token, then wait for its reply.
     fun approve(context: Context, values: Map<String, Any?>, result: MethodChannel.Result) {
         val node = values["nodeId"] as? String ?: ""
         val nonce = values["nonce"] as? String ?: ""

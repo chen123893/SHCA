@@ -16,6 +16,7 @@ class MedicationImageException implements Exception {
 
   final String message;
 
+  // Use the saved message when showing this error.
   @override
   String toString() => message;
 }
@@ -40,8 +41,10 @@ class MedicationImageStorageService {
 
   final String baseUrl;
 
+  // Check whether the private image backend URL is available.
   bool get isConfigured => baseUrl.trim().isNotEmpty;
 
+  // Upload the selected medicine photo under the elderly account.
   Future<String> upload({
     required XFile image,
     required String elderlyId,
@@ -87,6 +90,7 @@ class MedicationImageStorageService {
     return imageKey;
   }
 
+  // Create an authenticated request for a private medicine photo.
   Future<MedicationImageRequest> authorisedDownload({
     required String imageKey,
     required String elderlyId,
@@ -107,6 +111,7 @@ class MedicationImageStorageService {
     );
   }
 
+  // Delete a medicine photo that is no longer needed.
   Future<void> delete({
     required String imageKey,
     required String elderlyId,
@@ -133,6 +138,7 @@ class MedicationImageStorageService {
     }
   }
 
+  // Build the backend URL for this request.
   Uri _endpoint() {
     if (!isConfigured) {
       throw const MedicationImageException(
@@ -143,6 +149,7 @@ class MedicationImageStorageService {
     return Uri.parse('$trimmed/v1/medication-images');
   }
 
+  // Get the Firebase token needed for private photo requests.
   Future<String> _idToken() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -159,6 +166,7 @@ class MedicationImageStorageService {
     return token;
   }
 
+  // Read the backend's message when a photo request fails.
   String _errorMessage(String body, int statusCode) {
     try {
       final decoded = jsonDecode(body);
@@ -173,6 +181,7 @@ class MedicationImageStorageService {
   }
 }
 
+// Choose a supported image MIME type for the upload.
 @visibleForTesting
 String medicationImageContentType({
   String? declaredType,
@@ -219,6 +228,7 @@ String medicationImageContentType({
 class MedicationTextRecognitionService {
   const MedicationTextRecognitionService();
 
+  // Read the package text with OCR before suggesting editable medicine details.
   Future<String> recognise(XFile image) async {
     final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
     try {
@@ -327,6 +337,7 @@ MedicationScanSuggestions medicationSuggestionsFromText(String rawText) {
     caseSensitive: false,
   );
 
+  // Remove label headings and prices from a possible medicine name.
   String cleanName(String value) {
     var cleaned = value
         .replaceFirst(
@@ -376,6 +387,7 @@ MedicationScanSuggestions medicationSuggestionsFromText(String rawText) {
     return cleaned;
   }
 
+  // Reject instruction lines and rank the remaining medicine-name candidates.
   int? nameScore(String original) {
     final line = cleanName(original);
     if (line.length < 3 || line.length > 60) return null;
@@ -477,6 +489,7 @@ MedicationScanSuggestions medicationSuggestionsFromText(String rawText) {
   );
 }
 
+// Read English and Malay instructions, leaving uncertain choices for manual review.
 String? _medicationLabelInstructions(
   String text,
   bool liquid,
@@ -484,6 +497,7 @@ String? _medicationLabelInstructions(
 ) {
   final lower = text.toLowerCase();
   final meals = <String, String>{};
+  // Capitalise the recognised instruction for display.
   String title(String value) => value
       .split(RegExp(r'\s+'))
       .map(
@@ -492,6 +506,7 @@ String? _medicationLabelInstructions(
             : '${word[0].toUpperCase()}${word.substring(1)}',
       )
       .join(' ');
+  // Flag instructions containing words such as jangan instead of assuming their meaning.
   bool negated(int start) {
     final prefix = lower.substring(0, start).split('\n').last;
     if (!RegExp(r'\b(?:jangan|tidak|not|without)\b').hasMatch(prefix)) {
@@ -501,6 +516,7 @@ String? _medicationLabelInstructions(
     return true;
   }
 
+  // Collect matching meal instructions without using negated phrases.
   void meal(
     String kind,
     String pattern,
@@ -629,6 +645,7 @@ String? _medicationLabelInstructions(
   return parts.isEmpty ? null : parts.toSet().join('; ');
 }
 
+// Check whether an amount is part of a range or alternative dose.
 bool _ambiguousLabelAmountPrefix(String prefix) =>
     RegExp(
       r'(?:\d+(?:[.,]\d+)?|satu|dua|tiga|empat|lima|enam|tujuh|lapan|sembilan|sepuluh)\s*(?:/|[-–—]|to|hingga|atau|or)\s*$',

@@ -6,6 +6,7 @@ import 'package:shca/services/session_service.dart';
 class VerifyEmailScreen extends StatefulWidget {
   const VerifyEmailScreen({super.key});
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<VerifyEmailScreen> createState() => _VerifyEmailScreenState();
 }
@@ -15,6 +16,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
   bool _signingOut = false;
   Timer? timer;
 
+  // Start rechecking whether the account email has been verified.
   @override
   void initState() {
     super.initState();
@@ -31,6 +33,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
     }
   }
 
+  // Reload the Firebase user and continue once the email is verified.
   Future<void> _checkEmailVerified() async {
     final user = FirebaseAuth.instance.currentUser;
     await user?.reload(); // Refresh user state from Firebase
@@ -47,12 +50,15 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
     }
   }
 
+  // Cancel the timers and subscriptions, then release the controllers when this page is
+  // removed.
   @override
   void dispose() {
     timer?.cancel();
     super.dispose();
   }
 
+  // Sign out of the unverified account and return to login.
   Future<void> _backToLogin() async {
     if (_signingOut) return;
     setState(() => _signingOut = true);
@@ -75,6 +81,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
     }
   }
 
+  // Show the email verification instructions and recheck actions.
   @override
   Widget build(BuildContext context) {
     const Color primaryColor = Color(0xFFE85D4A);

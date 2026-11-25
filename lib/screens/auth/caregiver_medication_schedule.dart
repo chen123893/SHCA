@@ -26,6 +26,7 @@ class CaregiverMedicationScheduleScreen extends StatefulWidget {
   final CareLinkRepository? careLinkRepository;
   final String? caregiverId;
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<CaregiverMedicationScheduleScreen> createState() =>
       _CaregiverMedicationScheduleScreenState();
@@ -46,6 +47,7 @@ class _CaregiverMedicationScheduleScreenState
   String? _categoryFilter;
   late DateTimeRange _dateRange;
 
+  // Load linked accounts, medicine schedules and saved dose history.
   @override
   void initState() {
     super.initState();
@@ -64,6 +66,7 @@ class _CaregiverMedicationScheduleScreenState
     if (widget.linkedElderly == null) _loadLinkedElderly();
   }
 
+  // Keep the selected elderly account in the list after refreshing.
   List<LinkedElderly> _withSelected(
     List<LinkedElderly> people,
     LinkedElderly selected,
@@ -72,6 +75,7 @@ class _CaregiverMedicationScheduleScreenState
     ...people.where((person) => person.id != selected.id),
   ];
 
+  // Load the linked accounts available in the medicine selector.
   Future<void> _loadLinkedElderly() async {
     try {
       final repository =
@@ -103,6 +107,7 @@ class _CaregiverMedicationScheduleScreenState
     }
   }
 
+  // Switch medicine schedules and history to another linked account.
   void _selectElderly(String id) {
     final selected = _linkedElderly
         .where((person) => person.id == id)
@@ -118,12 +123,14 @@ class _CaregiverMedicationScheduleScreenState
     });
   }
 
+  // release the controllers when this page is removed.
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
   }
 
+  // Load the selected account's medicine schedules and dose records.
   Future<_CaregiverMedicationData> _loadMedicationData() async {
     final elderlyId = _selectedElderly.id;
     final results = await Future.wait<Object>(<Future<Object>>[
@@ -138,6 +145,7 @@ class _CaregiverMedicationScheduleScreenState
     return data;
   }
 
+  // Reload the selected account's medicine data after a change.
   Future<void> _reload() async {
     setState(() {
       _medicationFuture = _loadMedicationData();
@@ -145,6 +153,7 @@ class _CaregiverMedicationScheduleScreenState
     await _medicationFuture;
   }
 
+  // Apply a preset date range to the medication history.
   void _setQuickRange(int days) {
     final today = MedicationController.dateOnly(DateTime.now());
     setState(() {
@@ -155,6 +164,7 @@ class _CaregiverMedicationScheduleScreenState
     });
   }
 
+  // Let the caregiver choose the history start and end dates.
   Future<void> _chooseDateRange() async {
     final today = MedicationController.dateOnly(DateTime.now());
     final selected = await showDateRangePicker(
@@ -175,6 +185,7 @@ class _CaregiverMedicationScheduleScreenState
     setState(() => _dateRange = selected);
   }
 
+  // Open the add or edit form and save the returned schedule.
   Future<void> _openMedicationForm([MedicationSchedule? existing]) async {
     final selectedElderly = _selectedElderly;
     final schedule = await showModalBottomSheet<MedicationSchedule>(
@@ -267,6 +278,7 @@ class _CaregiverMedicationScheduleScreenState
     }
   }
 
+  // Remove an uploaded photo when no remaining schedule needs it.
   Future<void> _deleteUnusedImage(String candidate, String retained) async {
     if (candidate.isEmpty || candidate == retained) return;
     try {
@@ -279,6 +291,7 @@ class _CaregiverMedicationScheduleScreenState
     }
   }
 
+  // Confirm deletion, remove the schedule and clean up its unused photo.
   Future<void> _deleteMedication(MedicationSchedule schedule) async {
     final selectedElderly = _selectedElderly;
     final confirmed = await showDialog<bool>(
@@ -348,6 +361,7 @@ class _CaregiverMedicationScheduleScreenState
     }
   }
 
+  // List the medicines whose remaining stock needs attention.
   Future<void> _showLowStockMedicines(
     List<MedicationSchedule> medicines,
   ) async {
@@ -404,6 +418,7 @@ class _CaregiverMedicationScheduleScreenState
     if (selected != null && mounted) await _openMedicationForm(selected);
   }
 
+  // Show active medicines and the selected account's filtered dose history.
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -695,6 +710,7 @@ class _CaregiverMedicationScheduleScreenState
     );
   }
 
+  // Apply the current search and category filters to the active medicines.
   List<MedicationSchedule> _filteredSchedules(
     List<MedicationSchedule> schedules,
   ) {
@@ -708,6 +724,7 @@ class _CaregiverMedicationScheduleScreenState
         .toList();
   }
 
+  // Collect the categories available in the current medicine list.
   List<String> _categoryOptions(List<MedicationSchedule> schedules) {
     final categories =
         schedules
@@ -722,11 +739,13 @@ class _CaregiverMedicationScheduleScreenState
     return categories;
   }
 
+  // Check whether the medicine belongs to the selected category.
   bool _matchesCategory(MedicationSchedule schedule) =>
       _categoryFilter == null ||
       schedule.category.trim().toLowerCase() ==
           _categoryFilter!.trim().toLowerCase();
 
+  // Filter history records and group them by their scheduled day.
   Map<DateTime, List<MedicationRecord>> _groupedRecords(
     _CaregiverMedicationData data,
   ) {
@@ -758,6 +777,7 @@ class _CaregiverMedicationScheduleScreenState
     return grouped;
   }
 
+  // Check whether the medicine matches the search text.
   bool _matchesSchedule(MedicationSchedule schedule, String query) =>
       schedule.name.toLowerCase().contains(query) ||
       schedule.category.toLowerCase().contains(query) ||
@@ -765,6 +785,7 @@ class _CaregiverMedicationScheduleScreenState
       schedule.instruction.toLowerCase().contains(query);
 }
 
+// Compare the medicine details and repeat rules before adding a duplicate.
 bool isDuplicateMedicationSchedule(
   MedicationSchedule candidate,
   Iterable<MedicationSchedule> currentSchedules,
@@ -789,6 +810,7 @@ bool isDuplicateMedicationSchedule(
       existing.intervalDays == candidate.intervalDays,
 );
 
+// Check whether both schedules use the same daily reminder times.
 bool _sameReminderTimes(MedicationSchedule first, MedicationSchedule second) {
   final firstTimes = first.dailyReminderMinutes;
   final secondTimes = second.dailyReminderMinutes;
@@ -820,6 +842,7 @@ class _DateFilterCard extends StatelessWidget {
   final VoidCallback onPickRange;
   final ValueChanged<int> onQuickRange;
 
+  // Show the selected history dates and quick-range choices.
   @override
   Widget build(BuildContext context) {
     final selectedDays = range.duration.inDays + 1;
@@ -929,6 +952,7 @@ class _CategoryFilterButton extends StatelessWidget {
   final String? selected;
   final ValueChanged<String?> onSelected;
 
+  // Show the selected medicine category and its filter options.
   @override
   Widget build(BuildContext context) {
     final active = selected != null;
@@ -991,6 +1015,7 @@ class _StatusFilterChip extends StatelessWidget {
   final Color color;
   final VoidCallback onSelected;
 
+  // Show one selectable dose-status filter.
   @override
   Widget build(BuildContext context) {
     return ChoiceChip(
@@ -1022,6 +1047,7 @@ class _MedicationDaySection extends StatelessWidget {
   final List<MedicationSchedule> schedules;
   final ValueChanged<MedicationSchedule> onEdit;
 
+  // Show one day's medication history under its date heading.
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -1098,6 +1124,7 @@ class _CaregiverMedicationRecordRow extends StatelessWidget {
   final bool canEdit;
   final ValueChanged<MedicationSchedule> onEdit;
 
+  // Show one dose record in the caregiver's medicine history.
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -1182,6 +1209,7 @@ class _CaregiverStatusBadge extends StatelessWidget {
 
   final MedicationStatus status;
 
+  // Show the saved dose status in the caregiver history row.
   @override
   Widget build(BuildContext context) {
     final color = _statusColor(status);
@@ -1203,6 +1231,7 @@ class _CaregiverStatusBadge extends StatelessWidget {
   }
 }
 
+// Find the current medicine details or use the record's saved snapshot.
 MedicationSchedule _scheduleFor(
   List<MedicationSchedule> schedules,
   MedicationRecord record,
@@ -1223,6 +1252,7 @@ MedicationSchedule _scheduleFor(
   );
 }
 
+// Choose the text for this medication status.
 String _statusLabel(MedicationStatus status) => switch (status) {
   MedicationStatus.taken => 'Taken',
   MedicationStatus.pending => 'Pending',
@@ -1230,6 +1260,7 @@ String _statusLabel(MedicationStatus status) => switch (status) {
   MedicationStatus.missed => 'Missed',
 };
 
+// Choose the colour for this medication status.
 Color _statusColor(MedicationStatus status) => switch (status) {
   MedicationStatus.taken => const Color(0xFF15945B),
   MedicationStatus.pending => const Color(0xFFFF8B00),
@@ -1237,13 +1268,16 @@ Color _statusColor(MedicationStatus status) => switch (status) {
   MedicationStatus.missed => const Color(0xFFE53935),
 };
 
+// Use a short date label in the interface.
 String _shortDate(DateTime date) =>
     '${date.day} ${_monthName(date.month)} ${date.year}';
 
+// Show the selected date in the medication form.
 String _formatFormDate(DateTime date) =>
     '${date.day.toString().padLeft(2, '0')}/'
     '${date.month.toString().padLeft(2, '0')}/${date.year}';
 
+// Label the record group with its date.
 String _dateHeading(DateTime date) {
   final today = MedicationController.dateOnly(DateTime.now());
   final target = MedicationController.dateOnly(date);
@@ -1255,12 +1289,14 @@ String _dateHeading(DateTime date) {
   return '$prefix · ${target.day} ${_monthName(target.month)}';
 }
 
+// Format the reminder time for the medication row.
 String _clock(DateTime value) {
   final hour = value.hour % 12 == 0 ? 12 : value.hour % 12;
   final minute = value.minute.toString().padLeft(2, '0');
   return '$hour:$minute ${value.hour < 12 ? 'AM' : 'PM'}';
 }
 
+// Get the month name for the date heading.
 String _monthName(int month) => const <String>[
   'Jan',
   'Feb',
@@ -1276,6 +1312,7 @@ String _monthName(int month) => const <String>[
   'Dec',
 ][month - 1];
 
+// Get the weekday name for the date heading.
 String _weekdayName(int weekday) => const <String>[
   'Monday',
   'Tuesday',
@@ -1296,6 +1333,7 @@ enum _TreatmentDuration {
   custom,
 }
 
+// Calculate the inclusive treatment length from the start and end dates.
 int? _treatmentDurationDays(_TreatmentDuration value) => switch (value) {
   _TreatmentDuration.ongoing || _TreatmentDuration.custom => null,
   _TreatmentDuration.threeDays => 3,
@@ -1305,6 +1343,7 @@ int? _treatmentDurationDays(_TreatmentDuration value) => switch (value) {
   _TreatmentDuration.thirtyDays => 30,
 };
 
+// Describe the selected treatment duration in the form.
 String _treatmentDurationLabel(_TreatmentDuration value) => switch (value) {
   _TreatmentDuration.ongoing => 'Ongoing / until stopped',
   _TreatmentDuration.threeDays => '3 days',
@@ -1315,6 +1354,7 @@ String _treatmentDurationLabel(_TreatmentDuration value) => switch (value) {
   _TreatmentDuration.custom => 'Custom end date',
 };
 
+// Match the saved dates to a preset duration, or keep a custom duration.
 _TreatmentDuration _durationOptionFor(DateTime start, DateTime? end) {
   if (end == null) return _TreatmentDuration.ongoing;
   final days =
@@ -1338,6 +1378,7 @@ class _MedicationFormSheet extends StatefulWidget {
   final String elderlyId;
   final MedicationSchedule? initialSchedule;
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<_MedicationFormSheet> createState() => _MedicationFormSheetState();
 }
@@ -1374,12 +1415,15 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
   String? _formMessage;
   bool _formMessageIsError = false;
 
+  // Check whether this form is editing an existing schedule.
   bool get _isEditing => widget.initialSchedule != null;
 
+  // Check whether the saved medicine already has a photo.
   bool get _hasExistingImage =>
       !_removeExistingImage &&
       (widget.initialSchedule?.imageKey.trim().isNotEmpty ?? false);
 
+  // Fill the form from the existing medicine when editing a schedule.
   @override
   void initState() {
     super.initState();
@@ -1427,6 +1471,7 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
     _intervalDays = schedule.intervalDays.clamp(2, 365);
   }
 
+  // release the controllers when this page is removed.
   @override
   void dispose() {
     _nameController.dispose();
@@ -1438,9 +1483,11 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
     super.dispose();
   }
 
+  // Check that a required field has a value.
   String? _required(String? value) =>
       value == null || value.trim().isEmpty ? 'This field is required.' : null;
 
+  // Separate the scanned strength number and unit for the form fields.
   void _setStrengthFromText(String? value, {bool onlyIfEmpty = false}) {
     if (onlyIfEmpty && _doseController.text.trim().isNotEmpty) return;
     final text = (value ?? '').trim();
@@ -1459,6 +1506,7 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
     };
   }
 
+  // Open the time picker for one of the daily doses.
   Future<void> _chooseTime(int index) async {
     final selected = await showTimePicker(
       context: context,
@@ -1467,6 +1515,7 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
     if (selected != null) setState(() => _times[index] = selected);
   }
 
+  // Adjust the reminder-time fields to match the selected number of doses.
   void _setTimesPerDay(int count) {
     const defaults = <TimeOfDay>[
       TimeOfDay(hour: 8, minute: 0),
@@ -1495,6 +1544,7 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
     });
   }
 
+  // Take or choose the photo used to identify this medicine.
   Future<void> _pickMedicinePhoto(ImageSource source) async {
     final image = await _imagePicker.pickImage(
       source: source,
@@ -1510,6 +1560,7 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
     });
   }
 
+  // Ask whether the package scan should use the camera or gallery.
   Future<void> _choosePackageScanSource() async {
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
@@ -1550,6 +1601,7 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
     if (source != null && mounted) await _scanPackage(source);
   }
 
+  // Read the package with OCR and fill only the fields that are still empty.
   Future<void> _scanPackage(ImageSource source) async {
     final image = await _imagePicker.pickImage(
       source: source,
@@ -1600,6 +1652,7 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
     }
   }
 
+  // Choose when this medicine's schedule should begin.
   Future<void> _chooseStartDate() async {
     final selected = await _chooseDate(
       initialDate: _startDate,
@@ -1618,6 +1671,7 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
     });
   }
 
+  // Choose the last day of this medicine's schedule.
   Future<void> _chooseEndDate() async {
     final selected = await _chooseDate(
       initialDate: _endDate ?? _startDate.add(const Duration(days: 7)),
@@ -1631,6 +1685,7 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
     }
   }
 
+  // Update the end date when a different treatment length is selected.
   Future<void> _changeTreatmentDuration(_TreatmentDuration value) async {
     if (value == _TreatmentDuration.custom) {
       setState(() => _durationOption = value);
@@ -1644,6 +1699,7 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
     });
   }
 
+  // Open a date picker within the supported schedule limits.
   Future<DateTime?> _chooseDate({
     required DateTime initialDate,
     required DateTime firstDate,
@@ -1661,6 +1717,7 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
     return selected == null ? null : MedicationController.dateOnly(selected);
   }
 
+  // Explain the timing rules for the selected repeat option.
   String get _scheduleSectionSubtitle => switch (_recurrence) {
     MedicationRecurrence.daily => 'Reminder repeats every day.',
     MedicationRecurrence.selectedDays => 'Reminder runs only on selected days.',
@@ -1671,6 +1728,7 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
       'No automatic alarm and never marked as missed.',
   };
 
+  // Use a scan suggestion only when the caregiver has not entered a value.
   void _applySuggestionIfEmpty(
     TextEditingController controller,
     String? suggestion,
@@ -1681,6 +1739,7 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
     }
   }
 
+  // Clear the selected medicine photo from the form.
   void _removePhoto() {
     setState(() {
       _selectedImage = null;
@@ -1690,6 +1749,7 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
     });
   }
 
+  // Show a short message at the bottom of the screen.
   void _showMessage(String message, {bool isError = false}) {
     if (!mounted) return;
     setState(() {
@@ -1698,6 +1758,7 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
     });
   }
 
+  // Ask whether to use the medicine-type image when private upload is unavailable.
   Future<bool> _confirmCategoryFallback() async {
     if (_imageStorageService.isConfigured) return false;
     return await showDialog<bool>(
@@ -1723,6 +1784,7 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
         false;
   }
 
+  // Validate the entered medicine details, prepare its photo and return the schedule.
   Future<void> _save() async {
     final formIsValid = _formKey.currentState!.validate();
     final selectedTimes =
@@ -1831,6 +1893,7 @@ class _MedicationFormSheetState extends State<_MedicationFormSheet> {
     );
   }
 
+  // Show the medicine scan, photo, dose and schedule fields.
   @override
   Widget build(BuildContext context) {
     final themed = Theme.of(context).copyWith(
@@ -2669,6 +2732,7 @@ class _ScheduleCard extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
+  // Show an active medicine's dose, timing and schedule actions.
   @override
   Widget build(BuildContext context) {
     final reminderTimes = schedule.dailyReminderMinutes
@@ -2880,6 +2944,7 @@ class _MedicinePhotoPicker extends StatelessWidget {
   final VoidCallback? onGallery;
   final VoidCallback? onRemove;
 
+  // Show the photo preview with camera, gallery and remove actions.
   @override
   Widget build(BuildContext context) {
     final selected = image;
@@ -3011,6 +3076,7 @@ class _DateSelectionTile extends StatelessWidget {
   final String value;
   final VoidCallback? onTap;
 
+  // Show one schedule date and its date-picker action.
   @override
   Widget build(BuildContext context) {
     return InkWell(
@@ -3069,6 +3135,7 @@ class _WeekdaySelector extends StatelessWidget {
   final bool enabled;
   final void Function(int weekday, bool selected) onChanged;
 
+  // Let the caregiver choose which weekdays the medicine repeats on.
   @override
   Widget build(BuildContext context) {
     const labels = <String>['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -3116,6 +3183,7 @@ class _IntervalDayStepper extends StatelessWidget {
   final VoidCallback? onDecrease;
   final VoidCallback? onIncrease;
 
+  // Let the caregiver set the number of days between doses.
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -3177,6 +3245,7 @@ class _QuantityStepper extends StatelessWidget {
   final VoidCallback? onDecrease;
   final VoidCallback? onIncrease;
 
+  // Let the caregiver adjust the dose quantity within its limits.
   @override
   Widget build(BuildContext context) {
     final label = '$quantity $unit${quantity == 1 ? '' : 's'}';
@@ -3254,6 +3323,7 @@ class _FormSection extends StatelessWidget {
   final String subtitle;
   final Widget child;
 
+  // Keep related medication form fields under one heading.
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -3325,6 +3395,7 @@ class _LowStockBanner extends StatelessWidget {
   final List<MedicationSchedule> medicines;
   final VoidCallback onTap;
 
+  // Show which medicines have reached their low-stock threshold.
   @override
   Widget build(BuildContext context) {
     final count = medicines.length;
@@ -3387,6 +3458,7 @@ class _ScheduleMessage extends StatelessWidget {
   final String title;
   final String message;
 
+  // Show a loading, empty or error message in the medicine list.
   @override
   Widget build(BuildContext context) {
     return Container(

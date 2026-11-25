@@ -14,6 +14,7 @@ import 'package:shca/screens/auth/verify_email.dart';
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
+  // Choose the next screen from the account's sign-in and setup state.
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
@@ -60,6 +61,7 @@ class AuthGate extends StatelessWidget {
 class _AuthLoadingScreen extends StatelessWidget {
   const _AuthLoadingScreen();
 
+  // Show progress while the account state is being checked.
   @override
   Widget build(BuildContext context) =>
       const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -70,6 +72,7 @@ class _AuthErrorScreen extends StatelessWidget {
 
   final VoidCallback onRetry;
 
+  // Show the account-loading error and the available retry action.
   @override
   Widget build(BuildContext context) => Scaffold(
     body: Center(

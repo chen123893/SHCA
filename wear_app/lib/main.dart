@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'services/watch_bridge.dart';
 import 'services/wear_motion_service.dart';
 
+// Initialise Flutter and start the watch interface.
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const ShcaWatchApp());
@@ -15,6 +16,7 @@ void main() {
 class ShcaWatchApp extends StatelessWidget {
   const ShcaWatchApp({super.key, this.enableServices = true});
   final bool enableServices;
+  // Set up the app theme, routes and sign-in gate.
   @override
   Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false,
@@ -35,6 +37,7 @@ enum WatchPage { home, medicines, dose, emergency, activity }
 class WatchHome extends StatefulWidget {
   const WatchHome({super.key, this.enableServices = true});
   final bool enableServices;
+  // Keep this screen's changing values in its own state object.
   @override
   State<WatchHome> createState() => _WatchHomeState();
 }
@@ -81,6 +84,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
       _locationBackgroundAllowed = false,
       _locationBusy = false;
 
+  // Read the watch's emergency location-sharing setting.
   Future<void> _loadLocation() async {
     try {
       final status = await _locationChannel.invokeMapMethod<String, dynamic>(
@@ -99,6 +103,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     }
   }
 
+  // Save the location-sharing switch and request permission if needed.
   Future<void> _toggleLocation() async {
     setState(() => _locationBusy = true);
     try {
@@ -118,9 +123,11 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
   }
 
   DateTime? _createdAt, _lastPublishedAt;
+  // Make a separate ID for each watch action or emergency event.
   String _newId() =>
       '${DateTime.now().millisecondsSinceEpoch}-${_random.nextInt(1 << 32)}';
 
+  // Listen for medicine notification taps so they can open the alert screen.
   @override
   void initState() {
     super.initState();
@@ -135,6 +142,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     );
   }
 
+  // Connect the watch bridge, restore its state and start the needed services.
   Future<void> _initialize() async {
     try {
       final value = await _bridge.initialize();
@@ -148,6 +156,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     }
   }
 
+  // Adjust watch monitoring when Flutter moves into or out of the foreground.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && widget.enableServices) {
@@ -163,12 +172,14 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     }
   }
 
+  // Refresh account state and resume the services needed by the watch.
   Future<void> _resumeServices() async {
     unawaited(_loadLocation());
     await _syncMotion();
     await _refresh();
   }
 
+  // Start or stop foreground motion monitoring based on the current watch state.
   Future<void> _syncMotion() async {
     if (_state.signedIn &&
         _state.monitoringEnabled &&
@@ -180,6 +191,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     if (mounted) setState(() => _snapshot = _motion.snapshot);
   }
 
+  // Save the fall-detection choice and update monitoring.
   Future<void> _toggleFallDetection() async {
     if (_monitoringBusy) return;
     setState(() => _monitoringBusy = true);
@@ -203,6 +215,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     }
   }
 
+  // Ask Android for the latest watch account, permission and medicine state.
   Future<void> _refresh() async {
     if (_refreshing || !widget.enableServices) return;
     _refreshing = true;
@@ -215,6 +228,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     }
   }
 
+  // Apply the received watch state and keep the displayed medicine selection valid.
   void _applyState(WatchInitialState value) {
     if (!mounted) return;
     // Native data-layer events already trigger an immediate refresh. The
@@ -228,6 +242,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     if (value.launchEvent != null) _onEvent(value.launchEvent!);
   }
 
+  // Skip rebuilding when none of the values shown on the watch have changed.
   bool _sameVisibleState(WatchInitialState first, WatchInitialState second) {
     if (first.connected != second.connected ||
         first.phoneReady != second.phoneReady ||
@@ -258,6 +273,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     return true;
   }
 
+  // Route a native watch event to the right screen action.
   void _onEvent(Map<String, dynamic> event) {
     if (!mounted) return;
     switch (event['type']) {
@@ -297,6 +313,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     }
   }
 
+  // Handle the phone or cloud acknowledgement for a pending watch action.
   void _onAck(Map<String, dynamic> event) {
     if (_emergencyId.isEmpty || event['eventId'] != _emergencyId) return;
     final next = event['status'] as String? ?? '';
@@ -315,6 +332,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     });
   }
 
+  // Display the newest movement result and handle a possible fall.
   void _onMotion() {
     if (!mounted || !_state.monitoringEnabled) return;
     final next = _motion.snapshot;
@@ -347,6 +365,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     if (next.possibleFall && _page != WatchPage.emergency) _openEmergency(true);
   }
 
+  // Ask the paired phone to approve the watch account sign-in.
   Future<void> _startPhoneSignIn({bool renew = false}) async {
     if (_signingIn) return;
     setState(() {
@@ -386,6 +405,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     }
   }
 
+  // Refresh the watch state after the phone approves sign-in.
   Future<void> _completePhoneSignIn(Map<String, dynamic> event) async {
     if (!mounted) return;
     setState(() {
@@ -401,6 +421,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     }
   }
 
+  // Switch between entering credentials and signing in through the phone.
   Future<void> _selectSignInMode(WatchSignInMode mode) async {
     if (_signingIn) return;
     _codeExpiryTimer?.cancel();
@@ -417,6 +438,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     }
   }
 
+  // Use the native watch input screen to edit the selected credential.
   Future<void> _editCredential(bool password) async {
     if (_signingIn) return;
     final controller = password ? _passwordController : _emailController;
@@ -441,6 +463,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     }
   }
 
+  // Validate the entered account details and start watch sign-in.
   Future<void> _signIn() async {
     if (_signingIn) return;
     final email = _emailController.text.trim();
@@ -481,6 +504,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     }
   }
 
+  // Clear the watch session and return to the sign-in page.
   Future<void> _signOut() async {
     await _motion.stop();
     await _bridge.signOut();
@@ -493,6 +517,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     });
   }
 
+  // Hand the detected fall to the native countdown flow.
   Future<void> _confirmPossibleFall() async {
     if (_confirmingFall) return;
     _confirmingFall = true;
@@ -511,6 +536,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     }
   }
 
+  // Open the SOS page with the selected emergency source.
   void _openEmergency(bool automatic) {
     if (automatic && widget.enableServices) {
       unawaited(_confirmPossibleFall());
@@ -548,6 +574,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     });
   }
 
+  // Send one emergency event and show its delivery result.
   Future<void> _sendEmergency() async {
     if (_sending || _emergencyStatus == 'completed') return;
     _countdownTimer?.cancel();
@@ -596,6 +623,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     }
   }
 
+  // Submit Taken, Snooze or Skip for the selected watch dose.
   Future<void> _medicineAction(String action) async {
     if (_medicineBusy || !_dose.isAvailable) return;
     setState(() {
@@ -630,6 +658,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     }
   }
 
+  // Return from the current watch detail page to the previous view.
   void _back() {
     _countdownTimer?.cancel();
     if (widget.enableServices) {
@@ -653,6 +682,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     });
   }
 
+  // Stop listening for medicine notification taps.
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -672,6 +702,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     super.dispose();
   }
 
+  // Set up the app theme, routes and sign-in gate.
   @override
   Widget build(BuildContext context) {
     if (widget.enableServices && !_initialized) {
@@ -700,6 +731,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     );
   }
 
+  // Show the watch sign-in options and credential fields.
   Widget _signInPage() => PopScope(
     canPop: _signInMode == WatchSignInMode.choose,
     onPopInvokedWithResult: (didPop, _) {
@@ -852,6 +884,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
       ),
     ),
   );
+  // Show the watch shortcuts, connection and monitoring status.
   Widget _home() => LayoutBuilder(
     builder: (context, size) {
       return Stack(
@@ -936,6 +969,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
       );
     },
   );
+  // Show one large watch shortcut with its icon and label.
   Widget _shortcut(IconData icon, String text, VoidCallback tap, Key key) =>
       Semantics(
         button: true,
@@ -966,6 +1000,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
         ),
       );
 
+  // Keep the watch page scrollable inside the round display.
   Widget _scroll(String title, List<Widget> children) => LayoutBuilder(
     builder: (context, size) => SingleChildScrollView(
       key: ValueKey(_page),
@@ -998,6 +1033,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
       ),
     ),
   );
+  // Keep related watch details together in a rounded card.
   Widget _card(Widget child) => Container(
     margin: const EdgeInsets.only(bottom: 9),
     padding: const EdgeInsets.all(12),
@@ -1008,6 +1044,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     ),
     child: child,
   );
+  // List today's medicine reminders on the watch.
   Widget _medicines() {
     final now = DateTime.now();
     final next = upcomingToday(_state.medications, now);
@@ -1123,6 +1160,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     ]);
   }
 
+  // Show one dose with its Taken, Snooze and Skip actions.
   Widget _dosePage() => _scroll('Medicine time', [
     _card(
       Column(
@@ -1172,6 +1210,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
     ),
     TextButton(onPressed: _back, child: const Text('Back to medicines')),
   ]);
+  // Show the watch SOS action and its current delivery state.
   Widget _emergency() =>
       _scroll(_automaticFall ? 'Possible fall' : 'Emergency SOS', [
         Text(
@@ -1228,6 +1267,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
             style: TextStyle(fontSize: 10),
           ),
       ]);
+  // Show the current watch movement and monitoring details.
   Widget _activity() => _scroll('Activity', [
     OutlinedButton.icon(
       key: const Key('watch-location-toggle'),
@@ -1360,6 +1400,7 @@ class _WatchHomeState extends State<WatchHome> with WidgetsBindingObserver {
       label: const Text('Sign out'),
     ),
   ]);
+  // Format a reminder time for the watch display.
   String _time(DateTime date) =>
       '${date.hour % 12 == 0 ? 12 : date.hour % 12}:${date.minute.toString().padLeft(2, '0')} ${date.hour < 12 ? 'AM' : 'PM'}';
 }

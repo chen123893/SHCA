@@ -103,6 +103,7 @@ abstract interface class ActivityMonitor implements Listenable {
 /// model uses motion magnitudes so its predictions do not depend on orientation.
 class ActivityRecognitionService extends ChangeNotifier
     implements ActivityMonitor {
+  // Reuse the same phone activity monitor across screens.
   factory ActivityRecognitionService.phone() => _phoneInstance;
 
   static final ActivityRecognitionService _phoneInstance =
@@ -160,9 +161,11 @@ class ActivityRecognitionService extends ChangeNotifier
 
   ActivitySnapshot _snapshot = const ActivitySnapshot();
 
+  // Read the most recent phone activity result.
   @override
   ActivitySnapshot get snapshot => _snapshot;
 
+  // Load the model, subscribe to both sensors and start regular sampling.
   @override
   Future<void> start() async {
     if (_started) return;
@@ -216,6 +219,7 @@ class ActivityRecognitionService extends ChangeNotifier
     }
   }
 
+  // Load the model, labels, scaling values and detection settings.
   Future<void> _loadModelContract() async {
     final scaler =
         jsonDecode(await rootBundle.loadString(scalerAsset))
@@ -280,12 +284,14 @@ class ActivityRecognitionService extends ChangeNotifier
     }
   }
 
+  // Keep only the recent readings needed for interpolation.
   void _addSensorSample(List<_TimedVector3> buffer, _TimedVector3 sample) {
     buffer.add(sample);
     final cutoff = sample.timestamp.subtract(const Duration(milliseconds: 600));
     buffer.removeWhere((row) => row.timestamp.isBefore(cutoff));
   }
 
+  // Align both sensors to one time grid before filling the model window.
   void _sampleOnGrid() {
     if (_snapshot.state == ActivityMonitorState.unavailable) return;
     final target = DateTime.now().subtract(_interpolationDelay);
@@ -325,6 +331,7 @@ class ActivityRecognitionService extends ChangeNotifier
     if (shouldInfer && !_inferenceRunning) _runInference();
   }
 
+  // Estimate the sensor reading at the requested sample time.
   _TimedVector3? _interpolate(List<_TimedVector3> rows, DateTime target) {
     if (rows.isEmpty) return null;
     _TimedVector3? before;
@@ -360,6 +367,7 @@ class ActivityRecognitionService extends ChangeNotifier
     );
   }
 
+  // Run the sensor window through the model and check its outputs.
   void _runInference() {
     final interpreter = _interpreter;
     if (interpreter == null) return;
@@ -445,6 +453,7 @@ class ActivityRecognitionService extends ChangeNotifier
     }
   }
 
+  // Show that monitoring is unavailable if a sensor fails.
   void _handleSensorError(Object error, StackTrace stackTrace) {
     debugPrint('Motion sensor error: $error\n$stackTrace');
     _setSnapshot(
@@ -456,6 +465,7 @@ class ActivityRecognitionService extends ChangeNotifier
     );
   }
 
+  // Clear the old fall votes after the user says they are safe.
   @override
   void acknowledgePossibleFall() {
     if (!_snapshot.possibleFall) return;
@@ -475,11 +485,13 @@ class ActivityRecognitionService extends ChangeNotifier
     );
   }
 
+  // Save the latest monitoring result and update its listeners.
   void _setSnapshot(ActivitySnapshot value) {
     _snapshot = value;
     notifyListeners();
   }
 
+  // Cancel sampling and free the sensor buffers and model.
   Future<void> _releaseResources() async {
     _sampleTimer?.cancel();
     _sampleTimer = null;
@@ -498,6 +510,7 @@ class ActivityRecognitionService extends ChangeNotifier
     _inferenceRunning = false;
   }
 
+  // Pause monitoring and show the stopped state.
   @override
   Future<void> stop() async {
     if (!_started) return;
@@ -512,6 +525,7 @@ class ActivityRecognitionService extends ChangeNotifier
     );
   }
 
+  // Release the sensors, timer and model when this monitor is removed.
   @override
   void dispose() {
     _sampleTimer?.cancel();

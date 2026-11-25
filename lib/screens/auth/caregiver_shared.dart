@@ -20,6 +20,7 @@ class CaregiverElderlySelector extends StatelessWidget {
   final String selectedId;
   final ValueChanged<String> onChanged;
 
+  // Let the caregiver switch between linked elderly accounts.
   @override
   Widget build(BuildContext context) {
     return DropdownButtonFormField<String>(
@@ -71,6 +72,7 @@ class CaregiverBottomNavigation extends StatelessWidget {
   final VoidCallback onProfile;
   final VoidCallback? onStatistics;
 
+  // Show the caregiver pages and highlight the current page.
   @override
   Widget build(BuildContext context) {
     final items = <(IconData, String, VoidCallback)>[
@@ -170,9 +172,11 @@ class CaregiverPageHeader extends StatelessWidget
   final VoidCallback? onProfile;
   final bool showBack;
 
+  // Give Flutter the height needed for this page header.
   @override
   Size get preferredSize => const Size.fromHeight(64);
 
+  // Show the shared caregiver page heading and back action.
   @override
   Widget build(BuildContext context) {
     return AppBar(
@@ -223,10 +227,12 @@ class CaregiverPageHeader extends StatelessWidget
   }
 }
 
+// Return to the caregiver home page from another caregiver screen.
 void openCaregiverHome(BuildContext context) {
   Navigator.pushNamedAndRemoveUntil(context, '/home', (_) => false);
 }
 
+// Open the caregiver profile while keeping the shared navigation flow.
 void openCaregiverProfile(BuildContext context) {
   Navigator.pushReplacementNamed(context, '/caregiver-profile');
 }

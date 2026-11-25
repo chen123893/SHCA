@@ -4,6 +4,7 @@ import 'package:shca/services/emergency_location_service.dart';
 
 class EmergencyLocationSettings extends StatefulWidget {
   const EmergencyLocationSettings({super.key});
+  // Keep this screen's changing values in its own state object.
   @override
   State<EmergencyLocationSettings> createState() =>
       _EmergencyLocationSettingsState();
@@ -15,6 +16,7 @@ class _EmergencyLocationSettingsState extends State<EmergencyLocationSettings>
   bool _backgroundAllowed = false;
   bool _busy = false;
 
+  // Read location settings and watch for a return from system settings.
   @override
   void initState() {
     super.initState();
@@ -22,17 +24,21 @@ class _EmergencyLocationSettingsState extends State<EmergencyLocationSettings>
     _load();
   }
 
+  // Refresh location permission status when returning from system settings.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) _load();
   }
 
+  // remove the registered listeners, then release the controllers when this page is
+  // removed.
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
+  // Copy the device's sharing and permission values into the switch state.
   void _apply(Map<String, dynamic>? status) {
     if (!mounted || status == null) return;
     setState(() {
@@ -41,6 +47,7 @@ class _EmergencyLocationSettingsState extends State<EmergencyLocationSettings>
     });
   }
 
+  // Read the current location-sharing setting from the device.
   Future<void> _load() async {
     try {
       _apply(
@@ -55,6 +62,7 @@ class _EmergencyLocationSettingsState extends State<EmergencyLocationSettings>
     }
   }
 
+  // Request permission when enabling location sharing and save the user's choice.
   Future<void> _toggle(bool enabled) async {
     setState(() => _busy = true);
     try {
@@ -86,6 +94,7 @@ class _EmergencyLocationSettingsState extends State<EmergencyLocationSettings>
     }
   }
 
+  // Show the location-sharing switch and device permission state.
   @override
   Widget build(BuildContext context) {
     if (_enabled == null) return const SizedBox.shrink();

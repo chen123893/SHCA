@@ -12,6 +12,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEPLOYMENT_ROOT = PROJECT_ROOT / "saved_model" / "deployment"
 
 
+# Load one exported model and check its output shapes and values.
 def verify_target(target: str) -> dict:
     root = DEPLOYMENT_ROOT / target
     metadata = json.loads((root / "metadata.json").read_text(encoding="utf-8"))

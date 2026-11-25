@@ -9,17 +9,22 @@ import 'package:shca/services/profile_service.dart';
 
 const String careLinkAlphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
+// Ignore spaces and letter case when checking a link input.
 String normaliseCareLinkInput(String value) => value.trim().toLowerCase();
 
+// Keep only letters and numbers in the pairing code.
 String normalisePairingCode(String value) =>
     value.trim().replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toUpperCase();
 
+// Hash the normalised email to find its link lookup document.
 String careLinkEmailLookupId(String email) =>
     'email_${sha256.convert(utf8.encode(normaliseCareLinkInput(email)))}';
 
+// Build the lookup document ID from the pairing code.
 String careLinkCodeLookupId(String code) =>
     'code_${normalisePairingCode(code)}';
 
+// Treat Malaysian local and country-code phone numbers the same way.
 String normalisePhoneForComparison(String value) {
   var digits = value.replaceAll(RegExp(r'\D'), '');
   if (digits.startsWith('0060')) {
@@ -30,12 +35,14 @@ String normalisePhoneForComparison(String value) {
   return digits;
 }
 
+// Compare the numbers after removing formatting differences.
 bool isSamePhoneNumber(String first, String second) {
   final normalizedFirst = normalisePhoneForComparison(first);
   final normalizedSecond = normalisePhoneForComparison(second);
   return normalizedFirst.isNotEmpty && normalizedFirst == normalizedSecond;
 }
 
+// Make a six-character code from the allowed pairing alphabet.
 String generatePairingCode([Random? random]) {
   final source = random ?? Random.secure();
   return List<String>.generate(
@@ -49,6 +56,7 @@ class CareLinkException implements Exception {
 
   final String message;
 
+  // Use the saved message when showing this error.
   @override
   String toString() => message;
 }
@@ -74,6 +82,7 @@ class LinkedElderly {
   final String gender;
   final String medicalCondition;
 
+  // Calculate the age, accounting for whether this year's birthday has passed.
   int? get age {
     final birthDate = DateTime.tryParse(dateOfBirth);
     if (birthDate == null) return null;
@@ -114,18 +123,23 @@ class FirestoreCareLinkRepository implements CareLinkRepository {
   final FirebaseFirestore _firestore;
   final FirestoreProfileRepository _profileRepository;
 
+  // Use the users collection for these database operations.
   CollectionReference<Map<String, dynamic>> get _users =>
       _firestore.collection('users');
 
+  // Use the care_links collection for these database operations.
   CollectionReference<Map<String, dynamic>> get _links =>
       _firestore.collection('care_links');
 
+  // Use the caregiver_profiles collection for these database operations.
   CollectionReference<Map<String, dynamic>> get _caregiverProfiles =>
       _firestore.collection('caregiver_profiles');
 
+  // Use the care_link_lookups collection for these database operations.
   CollectionReference<Map<String, dynamic>> get _lookups =>
       _firestore.collection('care_link_lookups');
 
+  // Reuse the elderly account's code or create a new one if needed.
   @override
   Future<String> ensurePairingCode(String elderlyId) async {
     final elderlyReference = _users.doc(elderlyId);
@@ -169,6 +183,7 @@ class FirestoreCareLinkRepository implements CareLinkRepository {
     );
   }
 
+  // Save the email and code lookups together with the pairing code.
   Future<void> _saveLookupDocuments({
     required String elderlyId,
     required String pairingCode,
@@ -198,6 +213,7 @@ class FirestoreCareLinkRepository implements CareLinkRepository {
     await batch.commit();
   }
 
+  // Find the elderly account using an email address or pairing code.
   Future<({String elderlyId, String lookupId})?> _findElderly(
     String input,
   ) async {
@@ -214,6 +230,7 @@ class FirestoreCareLinkRepository implements CareLinkRepository {
     return (elderlyId: elderlyId, lookupId: lookupId);
   }
 
+  // Check the linking details and save the caregiver-to-elderly connection.
   @override
   Future<LinkedElderly> linkElderly({
     required String caregiverId,
@@ -277,6 +294,7 @@ class FirestoreCareLinkRepository implements CareLinkRepository {
     );
   }
 
+  // Load the elderly accounts linked to this caregiver.
   @override
   Future<List<LinkedElderly>> loadLinkedElderly(String caregiverId) async {
     final links = await _links
@@ -321,6 +339,7 @@ class FirestoreCareLinkRepository implements CareLinkRepository {
     return values;
   }
 
+  // Copy current email settings onto the caregiver's existing links.
   Future<void> _syncCaregiverEmailSettings(
     String caregiverId,
     List<QueryDocumentSnapshot<Map<String, dynamic>>> links,
@@ -361,6 +380,7 @@ class FirestoreCareLinkRepository implements CareLinkRepository {
     }
   }
 
+  // Use the account email, with the signed-in user's email as a fallback.
   String _caregiverEmail(String caregiverId, Map<String, dynamic>? userData) {
     final storedEmail = (userData?['email'] as String?)?.trim().toLowerCase();
     if (storedEmail?.isNotEmpty == true) return storedEmail!;
@@ -369,6 +389,7 @@ class FirestoreCareLinkRepository implements CareLinkRepository {
     return signedInUser?.email?.trim().toLowerCase() ?? '';
   }
 
+  // Get the caregivers connected to this elderly account.
   @override
   Future<List<String>> loadLinkedCaregiverIds(String elderlyId) async {
     final links = await _links
@@ -390,6 +411,7 @@ class FirestoreCareLinkRepository implements CareLinkRepository {
         .toList(growable: false);
   }
 
+  // Remove this caregiver's link to the elderly account.
   @override
   Future<void> unlinkElderly({
     required String caregiverId,
@@ -398,6 +420,7 @@ class FirestoreCareLinkRepository implements CareLinkRepository {
     await _links.doc('${caregiverId}_$elderlyId').delete();
   }
 
+  // Combine account and profile values for the linked elderly card.
   LinkedElderly _linkedElderlyFromData({
     required String id,
     required ElderlyProfile profile,
@@ -418,6 +441,7 @@ class FirestoreCareLinkRepository implements CareLinkRepository {
   }
 }
 
+// Read the saved preference for caregiver medication emails.
 bool _medicationEmailAlertFrom(Map<String, dynamic>? data) {
   final preferences = data?['alertPreferences'] ?? data?['alertPermissions'];
   return preferences is Map

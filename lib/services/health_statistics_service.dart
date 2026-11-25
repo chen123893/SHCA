@@ -17,6 +17,7 @@ abstract class HealthStatisticsRepository {
 
 class FirestoreHealthStatisticsRepository
     implements HealthStatisticsRepository {
+  // Load the selected accounts' dose and alert records, then calculate their totals.
   @override
   Future<StatisticsHistory> load(
     String elderlyId,
@@ -26,6 +27,7 @@ class FirestoreHealthStatisticsRepository
     final today = HealthStatistics.dateOnly(now.toLocal());
     final start = DateTime(today.year, today.month, today.day - periodDays + 1);
     final db = FirebaseFirestore.instance;
+    // Fetch records for one elderly account within the requested date range.
     Query<Map<String, dynamic>> query(String collection, String field) => db
         .collection(collection)
         .where('elderlyId', isEqualTo: elderlyId)

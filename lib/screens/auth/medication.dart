@@ -25,6 +25,7 @@ class MedicationReminderScreen extends StatefulWidget {
 
   final MedicationController? controller;
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<MedicationReminderScreen> createState() =>
       _MedicationReminderScreenState();
@@ -47,6 +48,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen>
   bool _scheduleReloadRunning = false;
   bool _scheduleReloadQueued = false;
 
+  // Load medicines and listen for schedule, record and permission changes.
   @override
   void initState() {
     super.initState();
@@ -72,6 +74,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen>
     unawaited(_loadAndScheduleAlarms());
   }
 
+  // Recheck alarm permissions and schedules when the app becomes active again.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && _ownsController) {
@@ -79,6 +82,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen>
     }
   }
 
+  // Refresh Android alarm permissions before syncing reminders.
   Future<void> _refreshAlarmStatusAndSync() async {
     final elderlyId = FirebaseAuth.instance.currentUser?.uid;
     if (elderlyId == null || _controller.medicationSchedules.isEmpty) return;
@@ -92,6 +96,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen>
     );
   }
 
+  // Load medicine data and set up the account's pending alarms.
   Future<void> _loadAndScheduleAlarms() async {
     await _controller.load();
     if (!_ownsController) return;
@@ -121,6 +126,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen>
     }
   }
 
+  // Watch for medicine schedule changes made by the caregiver.
   void _startScheduleListener(String elderlyId) {
     if (_scheduleSubscription != null) return;
     _scheduleSignature = _signatureFor(_controller.medicationSchedules);
@@ -150,6 +156,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen>
         );
   }
 
+  // Compare schedule details so unchanged snapshots do not trigger a reload.
   String _signatureFor(Iterable<MedicationSchedule> schedules) {
     final values =
         schedules
@@ -166,6 +173,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen>
     return values.join('|');
   }
 
+  // Reload medicine records and alarms when the saved schedule changes.
   Future<void> _reloadAfterScheduleChange(String elderlyId) async {
     if (_scheduleReloadRunning) {
       _scheduleReloadQueued = true;
@@ -189,6 +197,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen>
     }
   }
 
+  // Request caregiver emails for recent missed doses.
   Future<void> _sendRecentMissedEmails(String elderlyId) async {
     final cutoff = DateTime.now().subtract(const Duration(days: 2));
     final service = const MedicationEmailService();
@@ -209,6 +218,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen>
     }
   }
 
+  // Explain which Android permissions are needed for the medicine alarm.
   Future<void> _showAlarmPermissionDialog() async {
     final enable = await showDialog<bool>(
       context: context,
@@ -236,6 +246,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen>
     if (enable == true) await _enableMedicationAlarms();
   }
 
+  // Request the missing alarm permissions and refresh the schedule.
   Future<void> _enableMedicationAlarms() async {
     if (_requestingAlarmPermissions) return;
     final elderlyId = FirebaseAuth.instance.currentUser?.uid;
@@ -294,6 +305,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen>
     }
   }
 
+  // Describe the current notification and alarm permission state.
   String _alarmPermissionSummary(
     ({bool notifications, bool exact, bool fullScreen, bool appearOnTop})
     status,
@@ -303,6 +315,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen>
       'Full screen ${status.fullScreen ? 'On' : 'Off'} • '
       'Appear on top ${status.appearOnTop ? 'On' : 'Off'}';
 
+  // Schedule a test alarm so the user can check sound and display behaviour.
   Future<void> _testAlarmSound() async {
     final elderlyId = FirebaseAuth.instance.currentUser?.uid;
     if (elderlyId == null || _controller.medicationSchedules.isEmpty) return;
@@ -330,6 +343,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen>
     );
   }
 
+  // Cancel the test alarm when it is no longer needed.
   Future<void> _cancelTestAlarm() async {
     final elderlyId = FirebaseAuth.instance.currentUser?.uid;
     if (elderlyId == null || _controller.medicationSchedules.isEmpty) return;
@@ -340,10 +354,13 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen>
     if (mounted) setState(() => _testAlarmActive = false);
   }
 
+  // Refresh the displayed medication data.
   void _refresh() {
     if (mounted) setState(() {});
   }
 
+  // Cancel the timers and subscriptions, then remove the registered listeners, then release
+  // the controllers when this page is removed.
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -367,6 +384,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen>
     super.dispose();
   }
 
+  // Show today's medicines and the phone's alarm setup status.
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -392,6 +410,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen>
     );
   }
 
+  // Show today's timed and as-needed medicines with their current dose statuses.
   Widget _buildContent() {
     final now = DateTime.now();
     final todaySchedules = _controller.schedulesForDate(now);
@@ -563,6 +582,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen>
     );
   }
 
+  // Let the user choose how long to delay this dose's reminder.
   Future<void> _chooseSnooze(
     MedicationSchedule medication,
     DateTime scheduledAt,
@@ -616,6 +636,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen>
     }
   }
 
+  // Open the saved medication history page.
   void _openHistory() {
     Navigator.push<void>(
       context,
@@ -625,6 +646,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen>
     );
   }
 
+  // Send a caregiver reminder for the selected medicine.
   Future<void> _remindCaregiver(MedicationSchedule medication) async {
     if (_sendingLowStockEmail) return;
     final elderlyId = FirebaseAuth.instance.currentUser?.uid;
@@ -679,6 +701,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen>
     }
   }
 
+  // Show which medicines need their stock checked.
   void _showLowStockMessage(String message, {bool success = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -707,6 +730,7 @@ class _MedicationAlarmStatusCard extends StatelessWidget {
   final Future<void> Function() onTest;
   final Future<void> Function() onCancelTest;
 
+  // Show alarm permissions with setup and test actions.
   @override
   Widget build(BuildContext context) {
     final checking = permissions == null;
@@ -877,6 +901,7 @@ class MedicationAlertScreen extends StatefulWidget {
   final MedicationSchedule? initialMedication;
   final MedicationController? controller;
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<MedicationAlertScreen> createState() => _MedicationAlertScreenState();
 }
@@ -888,13 +913,17 @@ class _MedicationAlertScreenState extends State<MedicationAlertScreen> {
   late final String _alarmKey =
       '${widget.elderlyId}:${widget.medicationId}:${identityHashCode(this)}';
 
+  // Keep this alert tied to the original scheduled dose.
   DateTime _occurrenceFor(MedicationSchedule medication) =>
       widget.scheduledAt ??
       MedicationController.scheduledDateTime(medication, DateTime.now());
 
+  // Show the snoozed time when this reminder has been delayed.
   DateTime _displayTimeFor(MedicationSchedule medication) =>
       widget.reminderAt ?? _occurrenceFor(medication);
 
+  // Load the medicine details and start the alarm after the first frame if the alert has a
+  // medicine or is still loading.
   @override
   void initState() {
     super.initState();
@@ -911,6 +940,7 @@ class _MedicationAlertScreenState extends State<MedicationAlertScreen> {
     });
   }
 
+  // Refresh the alert and stop ringing if its medicine is no longer available.
   void _refresh() {
     if (!mounted) return;
     if (_controller.isLoaded && _medication == null) {
@@ -919,6 +949,7 @@ class _MedicationAlertScreenState extends State<MedicationAlertScreen> {
     setState(() {});
   }
 
+  // Save the skipped dose and request the optional caregiver email.
   Future<void> _markMissed(MedicationSchedule medication) async {
     await _controller.markMissed(
       medication,
@@ -937,6 +968,7 @@ class _MedicationAlertScreenState extends State<MedicationAlertScreen> {
     }
   }
 
+  // Find this alert's medicine, using its notification snapshot while data loads.
   MedicationSchedule? get _medication {
     for (final medication in _controller.medicationSchedules) {
       if (medication.id == widget.medicationId) return medication;
@@ -948,6 +980,7 @@ class _MedicationAlertScreenState extends State<MedicationAlertScreen> {
     return null;
   }
 
+  // Stop the alarm, save the response and close the alert only after saving succeeds.
   Future<void> _complete(
     MedicationSchedule medication,
     Future<void> Function() action,
@@ -976,6 +1009,7 @@ class _MedicationAlertScreenState extends State<MedicationAlertScreen> {
     }
   }
 
+  // Save a ten-minute delay for this alert's original dose.
   Future<void> _snooze(MedicationSchedule medication) async {
     await _complete(medication, () async {
       const duration = Duration(minutes: 10);
@@ -992,6 +1026,8 @@ class _MedicationAlertScreenState extends State<MedicationAlertScreen> {
     }, 'Reminder snoozed for 10 minutes.');
   }
 
+  // Stop the alarm, remove its listener and dispose of the controller if this page created
+  // it.
   @override
   void dispose() {
     unawaited(MedicationAlarmFeedback.stop(_alarmKey));
@@ -1000,6 +1036,7 @@ class _MedicationAlertScreenState extends State<MedicationAlertScreen> {
     super.dispose();
   }
 
+  // Show the dose alert with Taken, Snooze and Skip actions.
   @override
   Widget build(BuildContext context) {
     final medication = _medication;
@@ -1164,6 +1201,7 @@ class _ReminderFrequencyBadge extends StatelessWidget {
 
   final String label;
 
+  // Show the medicine's repeat schedule in a small badge.
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -1205,6 +1243,7 @@ class _AlertActionButton extends StatelessWidget {
   final bool enabled;
   final VoidCallback onPressed;
 
+  // Show one large medicine response button and disable it while saving.
   @override
   Widget build(BuildContext context) {
     return SizedBox(
@@ -1232,6 +1271,7 @@ class _MissingMedicationAlert extends StatelessWidget {
 
   final VoidCallback onBack;
 
+  // Explain that the medicine linked to this alert is no longer available.
   @override
   Widget build(BuildContext context) {
     return Center(
@@ -1261,6 +1301,7 @@ class MedicationHistoryScreen extends StatefulWidget {
 
   final MedicationController controller;
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<MedicationHistoryScreen> createState() =>
       _MedicationHistoryScreenState();
@@ -1269,22 +1310,26 @@ class MedicationHistoryScreen extends StatefulWidget {
 class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
   int _selectedRange = 0;
 
+  // Load dose history and listen for saved record changes.
   @override
   void initState() {
     super.initState();
     widget.controller.addListener(_refresh);
   }
 
+  // Refresh the displayed medication data.
   void _refresh() {
     if (mounted) setState(() {});
   }
 
+  // Remove the listener and dispose of the controller if this page created it.
   @override
   void dispose() {
     widget.controller.removeListener(_refresh);
     super.dispose();
   }
 
+  // Show dose history grouped by its scheduled day.
   @override
   Widget build(BuildContext context) {
     final grouped = _groupedRecords();
@@ -1392,6 +1437,7 @@ class _MedicationHistoryScreenState extends State<MedicationHistoryScreen> {
     );
   }
 
+  // Group saved medication history by the scheduled day.
   Map<DateTime, List<MedicationRecord>> _groupedRecords() {
     final today = MedicationController.dateOnly(DateTime.now());
     final start = switch (_selectedRange) {
@@ -1426,6 +1472,7 @@ class MedicationCard extends StatelessWidget {
   final VoidCallback onTaken;
   final VoidCallback onSnooze;
 
+  // Show a scheduled medicine with its reminder time and dose actions.
   @override
   Widget build(BuildContext context) {
     final isTaken = record.status == MedicationStatus.taken;
@@ -1588,6 +1635,7 @@ class _AsNeededMedicationCard extends StatelessWidget {
   final MedicationRecord record;
   final VoidCallback onTaken;
 
+  // Show a medicine that has no automatic reminder time.
   @override
   Widget build(BuildContext context) {
     final takenToday = record.status == MedicationStatus.taken;
@@ -1658,6 +1706,7 @@ class MedicationHistoryRow extends StatelessWidget {
   final MedicationRecord record;
   final MedicationSchedule medication;
 
+  // Show a saved dose response with the medicine details and time.
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -1716,6 +1765,7 @@ class StatusBadge extends StatelessWidget {
 
   final MedicationStatus status;
 
+  // Show the dose status with its matching label and colour.
   @override
   Widget build(BuildContext context) {
     final (label, foreground, background) = switch (status) {
@@ -1755,6 +1805,7 @@ class _TimeBadge extends StatelessWidget {
 
   final String time;
 
+  // Show the medicine reminder time in a small badge.
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -1792,6 +1843,7 @@ class _LowStockCard extends StatelessWidget {
   final VoidCallback onRemindCaregiver;
   final bool isSending;
 
+  // Show a medicine's remaining stock and the caregiver reminder action.
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -1849,6 +1901,7 @@ class _LowStockCard extends StatelessWidget {
 class _EmptyHistory extends StatelessWidget {
   const _EmptyHistory();
 
+  // Explain that no medicine records match the current history view.
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -1877,6 +1930,7 @@ class MedicationHeader extends StatelessWidget {
 
   final String title;
 
+  // Show the medication page heading in the shared app style.
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -1936,6 +1990,7 @@ class MedicationBottomNavigation extends StatelessWidget {
   final int selectedIndex;
   final VoidCallback onHome;
 
+  // Show the elderly navigation with Medicine selected.
   @override
   Widget build(BuildContext context) => ElderlyBottomNavigation(
     selectedIndex: selectedIndex,
@@ -1947,6 +2002,7 @@ class MedicationBottomNavigation extends StatelessWidget {
   );
 }
 
+// Return to the home screen.
 void _goHome(BuildContext context) {
   if (Navigator.canPop(context)) {
     Navigator.popUntil(context, (route) => route.isFirst);
@@ -1955,18 +2011,21 @@ void _goHome(BuildContext context) {
   }
 }
 
+// Format the medicine schedule's hour and minute for display.
 String formatMedicationTime(MedicationSchedule medication) {
   final hour = medication.hour % 12 == 0 ? 12 : medication.hour % 12;
   final suffix = medication.hour < 12 ? 'AM' : 'PM';
   return '$hour:${medication.minute.toString().padLeft(2, '0')} $suffix';
 }
 
+// Show the time in a readable 12-hour format.
 String formatClock(DateTime value) {
   final hour = value.hour % 12 == 0 ? 12 : value.hour % 12;
   final suffix = value.hour < 12 ? 'AM' : 'PM';
   return '$hour:${value.minute.toString().padLeft(2, '0')} $suffix';
 }
 
+// Show the full date above the medication list.
 String formatLongDate(DateTime value) {
   const months = <String>[
     'January',
@@ -1985,6 +2044,7 @@ String formatLongDate(DateTime value) {
   return '${value.day} ${months[value.month - 1]} ${value.year}';
 }
 
+// Label recent history as today, yesterday or its saved date.
 String historyDateHeading(DateTime value) {
   final today = MedicationController.dateOnly(DateTime.now());
   final date = MedicationController.dateOnly(value);
@@ -1996,6 +2056,7 @@ String historyDateHeading(DateTime value) {
   return '$prefix - ${date.day} ${shortMonthName(date.month)}';
 }
 
+// Get the weekday name for the history heading.
 String weekdayName(int weekday) => const <String>[
   'Monday',
   'Tuesday',
@@ -2006,6 +2067,7 @@ String weekdayName(int weekday) => const <String>[
   'Sunday',
 ][weekday - 1];
 
+// Use a short month name in the date label.
 String shortMonthName(int month) => const <String>[
   'Jan',
   'Feb',

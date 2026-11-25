@@ -8,6 +8,7 @@ import 'package:shca/screens/auth/pairing.dart';
 class RoleHomeRouter extends StatelessWidget {
   const RoleHomeRouter({super.key});
 
+  // Open the home page that matches the saved caregiver or elderly role.
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;

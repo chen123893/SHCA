@@ -31,8 +31,10 @@ class MedicationNotificationTarget {
   final DateTime? reminderAt;
   final MedicationSchedule? medicationSnapshot;
 
+  // Ignore a medicine notification that belongs to another signed-in account.
   bool belongsTo(String? userId) => userId != null && elderlyId == userId;
 
+  // Encode the medicine and dose details carried by the notification.
   String toPayload() => jsonEncode(<String, Object>{
     'type': 'medication_reminder',
     'elderlyId': elderlyId,
@@ -43,6 +45,7 @@ class MedicationNotificationTarget {
       'medicationSnapshot': medicationSnapshot!.toRecordSnapshot(),
   });
 
+  // Read a medicine notification only when its required fields are valid.
   static MedicationNotificationTarget? fromPayload(String? payload) {
     if (payload == null || payload.isEmpty) return null;
     try {
@@ -142,6 +145,7 @@ class PushNotificationService {
   ({bool notifications, bool exact, bool fullScreen, bool appearOnTop})?
   _lastMedicationAlarmPermissions;
 
+  // Read the most recently checked Android alarm permissions.
   ({bool notifications, bool exact, bool fullScreen, bool appearOnTop})?
   get lastMedicationAlarmPermissions => _lastMedicationAlarmPermissions;
 
@@ -153,14 +157,18 @@ class PushNotificationService {
       StreamController<String>.broadcast();
   static const String _alarmOwnersKey = 'medication_alarm_owners_v1';
   static const String _activeAlarmOwnerKey = 'active_medication_alarm_owner_v1';
+  // Keep each account's remembered alarm IDs under its own preference key.
   String _allAlarmIdsKey(String elderlyId) =>
       'medication_all_alarm_ids_v1_$elderlyId';
+  // Keep each account's current schedule IDs under its own preference key.
   String _scheduledAlarmIdsKey(String elderlyId) =>
       'medication_alarm_ids_$elderlyId';
 
+  // Let the app open an alert when a notification is tapped.
   Stream<String> get notificationTapPayloads =>
       _notificationTapController.stream;
 
+  // Set up notification channels, tap handlers and account cleanup once.
   Future<void> initialize() async {
     if (_initialized) return;
 
@@ -236,11 +244,13 @@ class PushNotificationService {
     );
   }
 
+  // Keep the medicine alert payload and notify the app to open it.
   void _deliverMedicationPayload(String payload) {
     _pendingNotificationPayload = payload;
     _notificationTapController.add(payload);
   }
 
+  // Clear old medicine alarms when the signed-in account changes.
   Future<void> _reconcileMedicationAlarmOwner(String? signedInUserId) async {
     final preferences = await SharedPreferences.getInstance();
     final owner = preferences.getString(_activeAlarmOwnerKey);
@@ -258,6 +268,7 @@ class PushNotificationService {
     await _cancelMedicationRemindersInternal();
   }
 
+  // Cancel the remembered medicine alarms for the requested account.
   Future<void> _cancelMedicationRemindersInternal({String? elderlyId}) async {
     final preferences = await SharedPreferences.getInstance();
     final owners =
@@ -297,6 +308,7 @@ class PushNotificationService {
     await preferences.setStringList(_alarmOwnersKey, owners.toList()..sort());
   }
 
+  // Remember this alarm ID so it can be cancelled later.
   Future<void> _rememberMedicationAlarm(String elderlyId, int id) async {
     final preferences = await SharedPreferences.getInstance();
     final owners =
@@ -314,6 +326,7 @@ class PushNotificationService {
     await preferences.setString(_activeAlarmOwnerKey, elderlyId);
   }
 
+  // Remove the cancelled alarm ID from local tracking.
   Future<void> _forgetMedicationAlarm(String elderlyId, int id) async {
     final preferences = await SharedPreferences.getInstance();
     final ids =
@@ -326,6 +339,7 @@ class PushNotificationService {
     );
   }
 
+  // Use the phone's timezone when scheduling medicine alarms.
   void _setLocalTimezone(String deviceIdentifier) {
     // Some Android devices return legacy IANA aliases which are intentionally
     // omitted from the compact timezone database bundled by the Dart package.
@@ -356,12 +370,14 @@ class PushNotificationService {
     debugPrint('Falling back to UTC for medication reminder scheduling.');
   }
 
+  // Read the waiting notification payload once, then clear it.
   String? takePendingNotificationPayload() {
     final payload = _pendingNotificationPayload;
     _pendingNotificationPayload = null;
     return payload;
   }
 
+  // Check the Android permissions needed for medicine alarms.
   Future<({bool notifications, bool exact, bool fullScreen, bool appearOnTop})>
   medicationAlarmPermissionStatus() async {
     await initialize();
@@ -404,6 +420,7 @@ class PushNotificationService {
     );
   }
 
+  // Open the system permission prompts needed for reliable medicine alarms.
   Future<({bool notifications, bool exact, bool fullScreen, bool appearOnTop})>
   requestMedicationAlarmPermissions() async {
     await initialize();
@@ -433,6 +450,7 @@ class PushNotificationService {
     return medicationAlarmPermissionStatus();
   }
 
+  // Cancel the previous alarms and schedule the upcoming reminders from the medicine list.
   Future<void> syncMedicationReminders({
     required String elderlyId,
     required List<MedicationSchedule> schedules,
@@ -515,6 +533,7 @@ class PushNotificationService {
     );
   }
 
+  // Set an in-app timer to open the medicine alert at its reminder time.
   void _scheduleForegroundMedicationScreen({
     required int id,
     required String payload,
@@ -550,6 +569,7 @@ class PushNotificationService {
     );
   }
 
+  // Schedule a delayed reminder that still points to the original dose.
   Future<void> snoozeMedicationReminder({
     required String elderlyId,
     required MedicationSchedule medication,
@@ -596,6 +616,7 @@ class PushNotificationService {
     );
   }
 
+  // Schedule a short test so the user can check the alarm setup.
   Future<void> showMedicationTestAlarm({
     required String elderlyId,
     required MedicationSchedule medication,
@@ -616,6 +637,7 @@ class PushNotificationService {
     );
   }
 
+  // Remove the pending test alarm and its foreground timer.
   Future<void> cancelMedicationTestAlarm({
     required String elderlyId,
     required MedicationSchedule medication,
@@ -630,6 +652,7 @@ class PushNotificationService {
     );
   }
 
+  // Use exact alarms when allowed and fall back when permission is missing.
   Future<AndroidScheduleMode> _medicationScheduleMode() async {
     final android = _notifications
         .resolvePlatformSpecificImplementation<
@@ -641,6 +664,7 @@ class PushNotificationService {
         : AndroidScheduleMode.exactAllowWhileIdle;
   }
 
+  // Ask Android to schedule the medicine alarm that can open the app.
   Future<void> _scheduleNativeMedicationAlarm({
     required int id,
     required DateTime scheduledDate,
@@ -662,6 +686,7 @@ class PushNotificationService {
     }
   }
 
+  // Ask Android to cancel the alarm with this ID.
   Future<void> _cancelNativeMedicationAlarm(int id) async {
     if (!Platform.isAndroid) return;
     try {
@@ -674,6 +699,7 @@ class PushNotificationService {
     }
   }
 
+  // Use the medicine alarm channel with sound, vibration and the alert screen.
   NotificationDetails _medicationNotificationDetails({
     bool fullScreen = true,
     bool insistent = false,
@@ -700,6 +726,7 @@ class PushNotificationService {
     ),
   );
 
+  // Find the next occurrence of the requested reminder time.
   tz.TZDateTime _nextMedicationTime(int hour, int minute) {
     final now = tz.TZDateTime.now(tz.local);
     var scheduled = tz.TZDateTime(
@@ -758,6 +785,7 @@ class PushNotificationService {
     return occurrences;
   }
 
+  // Attach the account, medicine snapshot and original dose time to the alarm.
   String _medicationPayload(
     String elderlyId,
     MedicationSchedule medication,
@@ -771,6 +799,7 @@ class PushNotificationService {
     medicationSnapshot: medication,
   ).toPayload();
 
+  // Make the same notification ID each time for a given account and alarm.
   @visibleForTesting
   static int medicationNotificationId(String elderlyId, String medicationId) {
     final bytes = sha256.convert('$elderlyId:$medicationId'.codeUnits).bytes;
@@ -778,6 +807,7 @@ class PushNotificationService {
         0x7fffffff;
   }
 
+  // Register this caregiver phone's push token and follow token changes.
   Future<bool> registerCaregiver(String caregiverId) async {
     try {
       await initialize();
@@ -819,6 +849,7 @@ class PushNotificationService {
     }
   }
 
+  // Remove this phone's caregiver push registration at sign-out.
   Future<void> unregisterCaregiver() async {
     final caregiverId = _caregiverId ?? FirebaseAuth.instance.currentUser?.uid;
     final token = _registeredToken ?? await _messaging.getToken();
@@ -832,6 +863,7 @@ class PushNotificationService {
     await _messaging.deleteToken();
   }
 
+  // Save the current device token under the caregiver account.
   Future<void> _saveToken(String caregiverId, String token) async {
     await FirebaseFirestore.instance
         .collection('caregiver_profiles')
@@ -846,6 +878,7 @@ class PushNotificationService {
         }, SetOptions(merge: true));
   }
 
+  // Delete the saved device token for this installation.
   Future<void> _deleteToken(String caregiverId, String token) async {
     try {
       await FirebaseFirestore.instance
@@ -859,6 +892,7 @@ class PushNotificationService {
     }
   }
 
+  // Show a local notification when a push arrives while the app is open.
   Future<void> _showForegroundNotification(RemoteMessage message) async {
     final notification = message.notification;
     if (notification == null) return;
@@ -888,6 +922,7 @@ class PushNotificationService {
     );
   }
 
+  // Hash the push token to make its Firestore document ID.
   String _tokenDocumentId(String token) =>
       sha256.convert(token.codeUnits).toString();
 }

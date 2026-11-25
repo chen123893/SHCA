@@ -13,6 +13,7 @@ class PairingScreen extends StatefulWidget {
   final CareLinkRepository? repository;
   final ProfileRepository? profileRepository;
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<PairingScreen> createState() => _PairingScreenState();
 }
@@ -44,6 +45,7 @@ class _PairingScreenState extends State<PairingScreen> {
   bool _pushAlert = true;
   bool _medicationEmailAlert = true;
 
+  // Load the account role and prepare the matching profile form.
   @override
   void initState() {
     super.initState();
@@ -53,6 +55,7 @@ class _PairingScreenState extends State<PairingScreen> {
     _fetchUserRole();
   }
 
+  // release the controllers when this page is removed.
   @override
   void dispose() {
     _elderlyNameController.dispose();
@@ -64,6 +67,7 @@ class _PairingScreenState extends State<PairingScreen> {
     super.dispose();
   }
 
+  // Read the selected account role to show the correct setup form.
   Future<void> _fetchUserRole() async {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -111,6 +115,7 @@ class _PairingScreenState extends State<PairingScreen> {
     }
   }
 
+  // Save the elderly profile and continue to the pairing-code page.
   Future<void> _saveElderlyDetails() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedDateOfBirth == null) {
@@ -173,6 +178,7 @@ class _PairingScreenState extends State<PairingScreen> {
     }
   }
 
+  // Save the caregiver profile and continue to account linking.
   Future<void> _saveCaregiverDetails({required bool linkNow}) async {
     setState(() => _linkNowRequested = linkNow);
     if (!_formKey.currentState!.validate()) return;
@@ -240,6 +246,7 @@ class _PairingScreenState extends State<PairingScreen> {
     }
   }
 
+  // Show the error without leaving the current screen.
   void _showError(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -247,6 +254,7 @@ class _PairingScreenState extends State<PairingScreen> {
     );
   }
 
+  // Show the setup form for the selected caregiver or elderly role.
   @override
   Widget build(BuildContext context) {
     if (_isFetchingRole) {
@@ -351,6 +359,7 @@ class _PairingScreenState extends State<PairingScreen> {
     );
   }
 
+  // Show personal details and the emergency contact fields for an elderly account.
   Widget _buildElderlyForm() {
     return Column(
       children: [
@@ -418,6 +427,7 @@ class _PairingScreenState extends State<PairingScreen> {
     );
   }
 
+  // Show the caregiver contact and notification fields.
   Widget _buildCaregiverForm() {
     return Column(
       children: [
@@ -552,6 +562,7 @@ class _PairingScreenState extends State<PairingScreen> {
     );
   }
 
+  // Reuse the same style and validation layout for setup fields.
   Widget _buildTextField({
     Key? key,
     required String label,
@@ -590,6 +601,7 @@ class _PairingScreenState extends State<PairingScreen> {
     );
   }
 
+  // Show the selected birth date and open its date picker.
   Widget _buildDateOfBirthPicker() {
     return InkWell(
       borderRadius: BorderRadius.circular(16),
@@ -626,6 +638,7 @@ class _PairingScreenState extends State<PairingScreen> {
     );
   }
 
+  // Show the gender options used in the profile.
   Widget _buildGenderPicker() {
     return DropdownButtonFormField<String>(
       initialValue: _selectedGender,
@@ -649,9 +662,11 @@ class _PairingScreenState extends State<PairingScreen> {
     );
   }
 
+  // Check that the setup field is not empty.
   String? Function(String?) _requiredValidator(String message) =>
       (value) => value == null || value.trim().isEmpty ? message : null;
 
+  // Check the contact number before saving the profile.
   String? _phoneValidator(String? value) {
     final phone = value?.trim() ?? '';
     if (phone.isEmpty) return 'Enter a contact phone number.';
@@ -662,11 +677,13 @@ class _PairingScreenState extends State<PairingScreen> {
     return null;
   }
 
+  // Store the date as year-month-day.
   String _formatIsoDate(DateTime value) =>
       '${value.year.toString().padLeft(4, '0')}-'
       '${value.month.toString().padLeft(2, '0')}-'
       '${value.day.toString().padLeft(2, '0')}';
 
+  // Show the chosen date in a readable format.
   String _formatFriendlyDate(DateTime value) {
     const months = <String>[
       'Jan',
@@ -685,6 +702,7 @@ class _PairingScreenState extends State<PairingScreen> {
     return '${value.day} ${months[value.month - 1]} ${value.year}';
   }
 
+  // Show progress while the setup form is being saved.
   Widget _savingIcon() => _isSubmitting
       ? const SizedBox.square(
           dimension: 20,
@@ -699,6 +717,7 @@ class _PairingScreenState extends State<PairingScreen> {
 class _StepIndicator extends StatelessWidget {
   const _StepIndicator();
 
+  // Show the current stage of account setup.
   @override
   Widget build(BuildContext context) {
     return Column(

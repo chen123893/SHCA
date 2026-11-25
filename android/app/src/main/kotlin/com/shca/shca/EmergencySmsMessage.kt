@@ -8,6 +8,7 @@ import kotlin.math.roundToInt
 
 /** Plain location details: Malaysian carriers block SMS containing hyperlinks. */
 internal object EmergencySmsMessage {
+    // Build the emergency SMS and include the location details when available.
     fun format(manualSos: Boolean, location: Map<String, Any>?, timeZone: TimeZone = TimeZone.getDefault()): String {
         val introduction = if (manualSos) "SHCA SOS: Help requested. Call and check now."
             else "SHCA FALL: Possible fall. Call and check now."

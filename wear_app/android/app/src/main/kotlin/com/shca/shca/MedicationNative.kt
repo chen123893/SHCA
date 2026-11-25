@@ -15,9 +15,11 @@ data class NativeMedication(
     val remindAt: Long = scheduledAt, val status: String = "pending",
 ) {
     val isAvailable get() = id.isNotBlank() && occurrenceId.isNotBlank()
+    // Prepare the saved watch dose for the Flutter medicine page.
     fun toMap(): Map<String, Any?> = mapOf("id" to id, "occurrenceId" to occurrenceId, "name" to name,
         "dose" to dose, "instruction" to instruction, "scheduledAt" to scheduledAt, "remindAt" to remindAt, "status" to status)
     companion object {
+        // Read the watch medicine and its original dose identity from JSON.
         fun fromJson(json: JSONObject) = NativeMedication(json.optString("id"), json.optString("occurrenceId"),
             json.optString("name", "Medicine"), json.optString("dose"), json.optString("instruction"),
             json.optLong("scheduledAt"), json.optLong("remindAt", json.optLong("scheduledAt")), json.optString("status", "pending"))
@@ -26,13 +28,18 @@ data class NativeMedication(
 
 object MedicationStore {
     private const val PREFS = "shca_watch_medication_v3"
+    // Read the private watch medicine storage.
     private fun prefs(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    // Read the watch account that owns these medicine reminders.
     fun userId(c: Context) = prefs(c).getString("userId", "") ?: ""
+    // Load the watch's stored doses for the current account.
     fun all(c: Context): List<NativeMedication> {
         val rows = try { JSONArray(prefs(c).getString("rows", "[]")) } catch (_: Exception) { JSONArray() }
         return (0 until rows.length()).mapNotNull { rows.optJSONObject(it)?.let(NativeMedication::fromJson) }
     }
+    // Find one stored dose by its occurrence ID.
     fun find(c: Context, occurrenceId: String) = all(c).find { it.occurrenceId == occurrenceId }
+    // Accept the synced medicine list for the correct watch account.
     fun receive(c: Context, uid: String, json: String) {
         val old = all(c)
         old.forEach { MedicationScheduler.cancel(c, it) }
@@ -61,17 +68,22 @@ object MedicationStore {
         all(c).filter { it.status != "taken" }.forEach { MedicationScheduler.schedule(c, it) }
         WatchEventBus.emit(mapOf("type" to "medication_updated"))
     }
+    // Remember the dose currently displayed as a watch medicine alert.
     fun setActive(c: Context, m: NativeMedication) {
         val pending = (prefs(c).getStringSet("activeDoses", emptySet()) ?: emptySet()).toMutableSet()
         pending.add(m.occurrenceId)
         prefs(c).edit().putStringSet("activeDoses", pending).apply()
     }
+    // Read the current watch medicine alert, if one is saved.
     fun active(c: Context): NativeMedication? {
         val ids = prefs(c).getStringSet("activeDoses", emptySet()) ?: emptySet()
         return all(c).filter { it.occurrenceId in ids && it.status != "taken" }.minByOrNull { it.remindAt }
     }
+    // Check whether this dose reminder has already been shown.
     fun wasDelivered(c: Context, m: NativeMedication) = prefs(c).getBoolean("delivered:${m.occurrenceId}:${m.remindAt}", false)
+    // Remember that this dose reminder has been delivered.
     fun delivered(c: Context, m: NativeMedication) { prefs(c).edit().putBoolean("delivered:${m.occurrenceId}:${m.remindAt}", true).apply() }
+    // Apply the watch response locally and prepare it for acknowledgement.
     fun action(c: Context, occurrenceId: String, action: String, remindAt: Long): NativeMedication? {
         val original = find(c, occurrenceId) ?: return null
         val updated = if (action == "snoozed") original.copy(status = "snoozed", remindAt = remindAt)
@@ -86,6 +98,7 @@ object MedicationStore {
         if (action == "snoozed") MedicationScheduler.schedule(c, updated)
         return updated
     }
+    // Finish the local dose update after its saved response is acknowledged.
     fun confirmAction(c: Context, occurrenceId: String) {
         val overrides = try { JSONObject(prefs(c).getString("overrides", "{}")) } catch (_: Exception) { JSONObject() }
         overrides.remove(occurrenceId)
@@ -94,14 +107,19 @@ object MedicationStore {
 }
 
 object MedicationScheduler {
+    // Build the watch medicine alarm intent for this dose.
     private fun intent(c: Context, m: NativeMedication) = Intent(c, MedicationAlarmReceiver::class.java).apply {
         data = Uri.parse("shca://medicine/" + Uri.encode(m.occurrenceId))
         putExtra("occurrenceId", m.occurrenceId); putExtra("remindAt", m.remindAt)
     }
+    // Create the matching pending intent for scheduling or cancelling the dose.
     private fun pending(c: Context, m: NativeMedication) = PendingIntent.getBroadcast(c, 0, intent(c, m),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    // Cancel the matching watch medicine alarm or notification.
     fun cancel(c: Context, m: NativeMedication) { c.getSystemService(AlarmManager::class.java).cancel(pending(c, m)) }
+    // Check whether the watch permits exact alarm scheduling.
     fun exactAllowed(c: Context): Boolean = Build.VERSION.SDK_INT < 31 || c.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
+    // Schedule the unfinished dose's next reminder with Android.
     fun schedule(c: Context, m: NativeMedication) {
         if (!m.isAvailable || m.status == "taken" || MedicationStore.wasDelivered(c, m)) return
         val now = System.currentTimeMillis()
@@ -116,7 +134,9 @@ object MedicationScheduler {
             alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending(c, m))
         }
     }
+    // Rebuild the watch's eligible medicine alarms from saved dose data.
     fun restore(c: Context) { MedicationStore.all(c).forEach { schedule(c, it) } }
+    // Open the watch setting used to allow exact alarms.
     fun requestExact(c: Context) {
         if (Build.VERSION.SDK_INT >= 31) c.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
             Uri.parse("package:${c.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -124,6 +144,7 @@ object MedicationScheduler {
 }
 
 class MedicationAlarmReceiver : BroadcastReceiver() {
+    // Handle the due medicine reminder or a system event that restores watch alarms.
     override fun onReceive(context: Context, intent: Intent?) {
         val medication = MedicationStore.find(context, intent?.getStringExtra("occurrenceId") ?: "") ?: return
         if (medication.status == "taken" || medication.remindAt != intent?.getLongExtra("remindAt", 0) ||
@@ -157,14 +178,18 @@ class MedicationAlarmReceiver : BroadcastReceiver() {
         const val CHANNEL = "shca_watch_medicine_vibration_v3"
         const val NOTIFICATION = 8302
         val PATTERN = longArrayOf(0, 600, 350, 600, 350, 600, 700, 600, 350, 600)
+        // Get the vibration service supported by this watch.
         @Suppress("DEPRECATION")
         private fun vibrator(c: Context): Vibrator = if (Build.VERSION.SDK_INT >= 31)
             c.getSystemService(VibratorManager::class.java).defaultVibrator else c.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        // Start the watch's medicine reminder vibration.
         fun vibrate(c: Context) {
             vibrator(c).vibrate(VibrationEffect.createWaveform(PATTERN, -1),
                 AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build())
         }
+        // Stop the medicine reminder vibration after the response.
         fun stopVibration(c: Context) { vibrator(c).cancel() }
+        // Cancel the matching watch medicine alarm or notification.
         fun cancel(c: Context, occurrenceId: String? = null) {
             stopVibration(c)
             val manager = c.getSystemService(NotificationManager::class.java)
@@ -177,6 +202,7 @@ class MedicationAlarmReceiver : BroadcastReceiver() {
     }
 }
 class MedicationRestoreReceiver : BroadcastReceiver() {
+    // Handle the due medicine reminder or a system event that restores watch alarms.
     override fun onReceive(context: Context, intent: Intent?) {
         MedicationScheduler.restore(context)
         if (WatchSession.isSignedIn(context)) WatchMonitoringService.start(context)

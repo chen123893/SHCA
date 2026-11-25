@@ -17,6 +17,7 @@ object MedicationAlarmScheduler {
 
     private const val PREFS = "native_medication_alarms_v1"
 
+    // Use Android's alarm clock to open the medicine alert at the scheduled time.
     fun schedule(
         context: Context,
         id: Int,
@@ -58,6 +59,7 @@ object MedicationAlarmScheduler {
         return true
     }
 
+    // Cancel the Android alarm and remove its saved registry entry.
     fun cancel(context: Context, id: Int) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         alarmManager.cancel(alarmIntent(context, id, ""))
@@ -74,6 +76,7 @@ object MedicationAlarmScheduler {
             .apply()
     }
 
+    // Restore future medicine alarms and remove entries that have expired.
     fun restore(context: Context) {
         val preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()
@@ -107,6 +110,7 @@ object MedicationAlarmScheduler {
         }
     }
 
+    // Put the medicine payload into the intent that opens the app.
     private fun alarmIntent(context: Context, id: Int, payload: String): PendingIntent =
         activityPendingIntent(
             context,
@@ -122,6 +126,8 @@ object MedicationAlarmScheduler {
             },
         )
 
+    // Create an activity pending intent with the Android version's background launch
+    // settings.
     private fun activityPendingIntent(
         context: Context,
         requestCode: Int,
@@ -147,6 +153,7 @@ object MedicationAlarmScheduler {
 }
 
 class MedicationAlarmBootReceiver : BroadcastReceiver() {
+    // Restore saved medicine alarms after boot or an app update.
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED ||
             intent.action == Intent.ACTION_MY_PACKAGE_REPLACED ||

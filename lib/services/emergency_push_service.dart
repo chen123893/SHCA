@@ -24,13 +24,16 @@ class EmergencyPushResult {
 
   // Acceptance by FCM/Brevo does not confirm that a person has seen the alert.
   bool get delivered => accepted > 0;
+  // Check whether at least one configured delivery channel accepted the alert.
   bool get anyChannelAccepted => accepted > 0 || emailAccepted > 0;
+  // Check whether every reported delivery channel accepted the alert.
   bool get allChannelsAccepted =>
       accepted > 0 &&
       unavailable == 0 &&
       emailAccepted > 0 &&
       emailUnavailable == 0;
 
+  // Read delivery counts and errors returned by the emergency backend.
   factory EmergencyPushResult.fromJson(Map<String, dynamic> value) =>
       EmergencyPushResult(
         accepted: (value['accepted'] as num?)?.toInt() ?? 0,
@@ -42,6 +45,7 @@ class EmergencyPushResult {
         emailError: value['emailError'] as String?,
       );
 
+  // Explain which alert channels accepted the request.
   String get deliverySummary => [
     accepted > 0
         ? 'Push: accepted by the notification service.'
@@ -70,6 +74,7 @@ class EmergencyPushService {
 
   final String baseUrl;
 
+  // Send the emergency details to the backend using the signed-in account.
   Future<EmergencyPushResult> send(String alertId) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -113,6 +118,7 @@ class EmergencyPushService {
     }
   }
 
+  // Read the JSON response safely, including an empty or invalid body.
   Map<String, dynamic>? _decode(String body) {
     try {
       final value = jsonDecode(body);

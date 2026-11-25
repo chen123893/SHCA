@@ -5,12 +5,15 @@ import 'package:flutter/services.dart';
 class MedicationAlarmFeedback {
   static const _channel = MethodChannel('com.shca.shca/alarm_permissions');
 
+  // Start the native medicine alarm feedback for this alert.
   static Future<void> start(String alarmKey) =>
       _invoke('startMedicationAlarmFeedback', alarmKey);
 
+  // Stop feedback for this alert without silencing a newer alarm.
   static Future<void> stop([String? alarmKey]) =>
       _invoke('stopMedicationAlarmFeedback', alarmKey);
 
+  // Send the feedback request to Android and handle unavailable native support.
   static Future<void> _invoke(String method, String? alarmKey) async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
     try {

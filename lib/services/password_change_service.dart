@@ -13,6 +13,7 @@ class FirebasePasswordChangeService implements PasswordChangeService {
 
   final FirebaseAuth _auth;
 
+  // Confirm the current password before saving the new Firebase password.
   @override
   Future<void> changePassword({
     required String currentPassword,
@@ -47,6 +48,7 @@ class FirebasePasswordChangeService implements PasswordChangeService {
     }
   }
 
+  // Turn a Firebase authentication error into a readable message.
   String _messageFor(String code) {
     switch (code) {
       case 'wrong-password':
@@ -76,6 +78,7 @@ class PasswordChangeFailure implements Exception {
 
   final String message;
 
+  // Use the saved message when showing this error.
   @override
   String toString() => message;
 }

@@ -29,6 +29,7 @@ object MedicationAlarmFeedback {
         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
         .build()
 
+    // Play the medicine alarm sound and vibration for the current alert key.
     @Suppress("DEPRECATION")
     fun start(context: Context, key: String) {
         if (activeKey == key) return
@@ -84,6 +85,7 @@ object MedicationAlarmFeedback {
         timeout = Runnable { stop(key) }.also { handler.postDelayed(it, 5 * 60 * 1000L) }
     }
 
+    // Stop this alarm's feedback while protecting a newer alert from an old stop request.
     fun stop(key: String? = null) {
         // Disposing an older alert must not silence a newer medicine alarm.
         if (key != null && key != activeKey) return

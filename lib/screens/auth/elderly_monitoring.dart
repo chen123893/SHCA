@@ -14,6 +14,7 @@ class ElderlyMonitoringScreen extends StatefulWidget {
 
   final ActivityMonitor activityMonitor;
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<ElderlyMonitoringScreen> createState() =>
       _ElderlyMonitoringScreenState();
@@ -24,6 +25,7 @@ class _ElderlyMonitoringScreenState extends State<ElderlyMonitoringScreen> {
   WearableStatus _wearable = const WearableStatus();
   StreamSubscription<Map<String, dynamic>>? _wearableSubscription;
 
+  // Connect the monitoring page to the phone and watch status updates.
   @override
   void initState() {
     super.initState();
@@ -33,6 +35,7 @@ class _ElderlyMonitoringScreenState extends State<ElderlyMonitoringScreen> {
     unawaited(_initializeWearable());
   }
 
+  // Listen for watch status changes and read its current connection.
   Future<void> _initializeWearable() async {
     final bridge = WearableBridgeService.instance;
     await bridge.initialize();
@@ -44,18 +47,22 @@ class _ElderlyMonitoringScreenState extends State<ElderlyMonitoringScreen> {
     _applyWearableStatus(await bridge.getStatus());
   }
 
+  // Update the watch status displayed on the monitoring page.
   void _applyWearableStatus(WearableStatus status) {
     if (!mounted) return;
     setState(() => _wearable = status);
     unawaited(ActivityStatusService.instance.publishWatch(status));
   }
 
+  // Reload the current phone and watch monitoring status.
   void _refresh() {
     if (!mounted) return;
     setState(() => _activity = widget.activityMonitor.snapshot);
     unawaited(ActivityStatusService.instance.publishPhone(_activity));
   }
 
+  // Cancel the timers and subscriptions, then remove the registered listeners, then release
+  // the controllers when this page is removed.
   @override
   void dispose() {
     widget.activityMonitor.removeListener(_refresh);
@@ -63,8 +70,10 @@ class _ElderlyMonitoringScreenState extends State<ElderlyMonitoringScreen> {
     super.dispose();
   }
 
+  // Return to the home screen.
   void _goHome() => Navigator.pop(context);
 
+  // Open the profile page.
   void _openProfile() {
     Navigator.pushReplacement<bool, void>(
       context,
@@ -75,6 +84,7 @@ class _ElderlyMonitoringScreenState extends State<ElderlyMonitoringScreen> {
     );
   }
 
+  // Show a device's connection and monitoring state.
   Widget _deviceCard({
     required IconData icon,
     required String title,
@@ -116,6 +126,7 @@ class _ElderlyMonitoringScreenState extends State<ElderlyMonitoringScreen> {
     );
   }
 
+  // Show the activity result reported by one device.
   Widget _activitySourceCard({
     required String source,
     required String label,
@@ -172,6 +183,7 @@ class _ElderlyMonitoringScreenState extends State<ElderlyMonitoringScreen> {
     );
   }
 
+  // Show phone and watch monitoring status with the latest movement details.
   @override
   Widget build(BuildContext context) {
     final phoneActive = _activity.state == ActivityMonitorState.active;
@@ -455,6 +467,7 @@ class FallHistoryScreen extends StatefulWidget {
 
   final ActivityMonitor activityMonitor;
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<FallHistoryScreen> createState() => _FallHistoryScreenState();
 }
@@ -462,6 +475,7 @@ class FallHistoryScreen extends StatefulWidget {
 class _FallHistoryScreenState extends State<FallHistoryScreen> {
   String _filter = 'all';
 
+  // Show the elderly account's saved possible-fall history.
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -654,6 +668,7 @@ class _FallEventCard extends StatelessWidget {
 
   final Map<String, dynamic> data;
 
+  // Show a possible-fall record and its saved response.
   @override
   Widget build(BuildContext context) {
     final status = (data['status'] as String?) ?? 'pending_confirmation';
@@ -735,6 +750,7 @@ class _SectionTitle extends StatelessWidget {
 
   final String text;
 
+  // Show the title for a group of related details.
   @override
   Widget build(BuildContext context) => Text(
     text,
@@ -753,6 +769,7 @@ class _RoundIcon extends StatelessWidget {
   final Color background;
   final Color foreground;
 
+  // Show a section icon inside a circular background.
   @override
   Widget build(BuildContext context) => Container(
     width: 52,
@@ -768,6 +785,7 @@ class _StatusPill extends StatelessWidget {
   final String label;
   final Color color;
 
+  // Show a short status label with its matching colour.
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -782,6 +800,7 @@ class _StatusPill extends StatelessWidget {
   );
 }
 
+// Choose the colour and icon for this activity.
 (IconData, Color, Color) _activityAppearance(String value) {
   return switch (value.trim().toLowerCase()) {
     'walking' => (
@@ -812,6 +831,7 @@ class _StatusPill extends StatelessWidget {
   };
 }
 
+// Turn the model label into a simple activity name.
 String _displayActivity(String value) {
   return switch (value.trim().toLowerCase()) {
     'resting' || 'activity_unknown' => 'Resting / Checking',
@@ -825,12 +845,14 @@ String _displayActivity(String value) {
   };
 }
 
+// Show the time in a readable 12-hour format.
 String _formatClock(DateTime value) {
   final hour = value.hour % 12 == 0 ? 12 : value.hour % 12;
   final minute = value.minute.toString().padLeft(2, '0');
   return '$hour:$minute ${value.hour >= 12 ? 'PM' : 'AM'}';
 }
 
+// Show a readable date in the history list.
 String _formatDate(DateTime value) {
   const months = <String>[
     'Jan',

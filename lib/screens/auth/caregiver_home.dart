@@ -18,6 +18,7 @@ class CaregiverHomeScreen extends StatefulWidget {
 
   final CareLinkRepository? repository;
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<CaregiverHomeScreen> createState() => _CaregiverHomeScreenState();
 }
@@ -35,6 +36,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
   String? _caregiverId;
   bool _signingOut = false;
 
+  // Load the caregiver account links and emergency alerts.
   @override
   void initState() {
     super.initState();
@@ -42,6 +44,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
     unawaited(_load());
   }
 
+  // Load the caregiver's linked elderly accounts.
   Future<void> _load() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -65,6 +68,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
     });
   }
 
+  // Replace the account request and the stream used for their alerts.
   void _setLinkedFuture(
     String caregiverId,
     Future<List<LinkedElderly>> linked,
@@ -77,6 +81,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
     );
   }
 
+  // Reload the linked accounts and visible home-page data.
   Future<void> _refresh() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
@@ -84,6 +89,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
     await _linkedFuture;
   }
 
+  // Sign out and return to the login screen.
   Future<void> _signOut() async {
     if (_signingOut) return;
     setState(() => _signingOut = true);
@@ -104,6 +110,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
     }
   }
 
+  // Show the caregiver's linked elderly accounts and current alerts.
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -208,6 +215,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
     );
   }
 
+  // Explain how to add the first linked elderly account.
   Widget _buildEmptyState() {
     return const Padding(
       padding: EdgeInsets.only(bottom: 14),
@@ -221,6 +229,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
     );
   }
 
+  // Show active emergency alerts from the linked accounts.
   Widget _buildEmergencyStatus() {
     final caregiverId = _caregiverId;
     if (caregiverId == null) return const SizedBox.shrink();
@@ -308,6 +317,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
     );
   }
 
+  // Show one linked elderly account with its available actions.
   Widget _buildElderlyCard(LinkedElderly elderly) {
     return Container(
       padding: const EdgeInsets.all(18),
@@ -456,6 +466,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
     );
   }
 
+  // Choose the greeting based on the current hour.
   String _greeting() {
     final hour = DateTime.now().hour;
     if (hour < 12) return 'Good morning';
@@ -477,6 +488,7 @@ class _StatusCard extends StatelessWidget {
   final String message;
   final Color color;
 
+  // Show a caregiver home-page status with its supporting details.
   @override
   Widget build(BuildContext context) {
     return Container(

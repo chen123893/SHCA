@@ -23,6 +23,7 @@ from zoneinfo import ZoneInfo
 ZONE = ZoneInfo('Asia/Kuala_Lumpur')
 
 
+# Convert the demo document into Firestore's REST field format.
 def encode(value):
     if value is None:
         return {'nullValue': None}
@@ -41,12 +42,14 @@ def encode(value):
     raise TypeError(type(value).__name__)
 
 
+# Convert one demo value into the matching Firestore field type.
 def scalar(fields, key):
     value = fields.get(key, {})
     return value.get('stringValue', value.get('booleanValue'))
 
 
 class Firestore:
+    # Keep the project and authentication details used by the demo Firestore client.
     def __init__(self, project):
         binary = shutil.which('firebase') or '/usr/local/bin/firebase'
         refresh = subprocess.run([binary, 'projects:list', '--json'], capture_output=True, text=True)
@@ -61,6 +64,7 @@ class Firestore:
         self.base = 'https://firestore.googleapis.com/v1/' + self.prefix.rstrip('/')
         self.context = ssl.create_default_context(cafile='/etc/ssl/cert.pem')
 
+    # Send the authenticated Firestore REST request and read its response.
     def request(self, suffix, data=None):
         request = urllib.request.Request(
             self.base + suffix,
@@ -75,9 +79,11 @@ class Firestore:
                 return None
             raise RuntimeError(f'Firestore returned HTTP {error.code}; operation stopped.') from None
 
+    # Read one Firestore document for the demo-data checks.
     def get(self, path):
         return self.request('/' + path)
 
+    # Run a Firestore query used to find existing demo records.
     def query(self, collection, field, value):
         rows = self.request(':runQuery', {'structuredQuery': {
             'from': [{'collectionId': collection}],
@@ -88,11 +94,13 @@ class Firestore:
         return [row['document'] for row in rows if 'document' in row]
 
 
+# Make a repeatable fingerprint for the demo schedule details.
 def fingerprint(documents):
     content = sorted(documents, key=lambda item: item['name'])
     return hashlib.sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()
 
 
+# Prepare the demo medicine schedules and dose-history documents.
 def build_documents(owner, caregiver, start, end, as_of, batch):
     metadata = {'isDemo': True, 'dataSource': 'synthetic_demo', 'demoBatchId': batch, 'createdAt': as_of}
     documents = {
@@ -153,6 +161,7 @@ def build_documents(owner, caregiver, start, end, as_of, batch):
     return documents
 
 
+# Read the script options and prepare or upload the demo medicine records.
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--project', required=True)

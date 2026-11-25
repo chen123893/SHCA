@@ -14,6 +14,7 @@ class WearableStatus {
     this.updatedAt,
   });
 
+  // Read the watch's connection, activity and monitoring status.
   factory WearableStatus.fromMap(Map<dynamic, dynamic> map) {
     final timestamp = (map['updatedAt'] as num?)?.toInt() ?? 0;
     return WearableStatus(
@@ -63,8 +64,10 @@ class WearableBridgeService {
       StreamController<Map<String, dynamic>>.broadcast();
   StreamSubscription<dynamic>? _nativeSubscription;
 
+  // Expose native watch events as a shared stream for the phone screens.
   Stream<Map<String, dynamic>> get events => _controller.stream;
 
+  // Subscribe once to the Android watch event channel.
   Future<void> initialize() async {
     if (!Platform.isAndroid || _nativeSubscription != null) return;
     _nativeSubscription = _events.receiveBroadcastStream().listen(
@@ -79,6 +82,7 @@ class WearableBridgeService {
     );
   }
 
+  // Ask Android for the latest watch connection and activity status.
   Future<WearableStatus> getStatus() async {
     if (!Platform.isAndroid) return const WearableStatus();
     try {
@@ -92,6 +96,7 @@ class WearableBridgeService {
     }
   }
 
+  // Read watch actions that arrived before the Flutter screen was ready.
   Future<List<Map<String, dynamic>>> takePendingEvents() async {
     if (!Platform.isAndroid) return const <Map<String, dynamic>>[];
     try {
@@ -108,6 +113,7 @@ class WearableBridgeService {
     }
   }
 
+  // Remove watch actions after they have been handled.
   Future<void> clearPendingEvents() async {
     if (!Platform.isAndroid) return;
     try {
@@ -117,6 +123,7 @@ class WearableBridgeService {
     }
   }
 
+  // Send the medicine details and dose time to the watch.
   Future<void> syncMedication({
     required String id,
     required String name,
@@ -140,6 +147,7 @@ class WearableBridgeService {
     }
   }
 
+  // Tell the watch that its current fall warning has been handled.
   Future<void> acknowledgeFall() async {
     if (!Platform.isAndroid) return;
     try {

@@ -18,24 +18,29 @@ internal object EmergencyLocation {
     private const val PREFS = "shca_emergency_location"
     private const val MAX_AGE_MS = 24 * 60 * 60_000L
 
+    // Check whether the device allows access to its location.
     fun hasPermission(context: Context) =
         context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
             context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
+    // Require both the account's sharing choice and the device location permission.
     fun isEnabled(context: Context, uid: String) = uid.isNotBlank() && hasPermission(context) &&
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(uid, false)
 
+    // Save this account's emergency location-sharing choice.
     fun setEnabled(context: Context, uid: String, enabled: Boolean) {
         if (uid.isNotBlank()) context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putBoolean(uid, enabled).apply()
     }
 
+    // Return the sharing and background-permission values for the interface.
     fun status(context: Context, uid: String) = mapOf(
         "enabled" to isEnabled(context, uid),
         "backgroundAllowed" to (Build.VERSION.SDK_INT < 29 ||
             context.checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED),
     )
 
+    // Get a usable current or last-known location only when sharing is enabled.
     fun capture(context: Context, uid: String, source: String): Map<String, Any>? {
         if (!isEnabled(context, uid)) return null
         return try {
@@ -69,15 +74,18 @@ internal object EmergencyLocation {
         }
     }
 
+    // Measure how long ago the location was obtained.
     private fun age(location: Location) =
         (SystemClock.elapsedRealtimeNanos() - location.elapsedRealtimeNanos) / 1_000_000
 
+    // Check the location's coordinates and age before using it in an alert.
     private fun valid(location: Location) =
         location.latitude.isFinite() && location.latitude in -90.0..90.0 &&
             location.longitude.isFinite() && location.longitude in -180.0..180.0 &&
             location.hasAccuracy() && location.accuracy.isFinite() &&
             location.accuracy in 0f..100_000f && age(location) in 0..MAX_AGE_MS
 
+    // Prepare the location, timestamp, source and accuracy values for an alert.
     private fun values(location: Location, source: String): Map<String, Any> = mapOf(
         "latitude" to location.latitude,
         "longitude" to location.longitude,
@@ -87,6 +95,7 @@ internal object EmergencyLocation {
         "kind" to if (age(location) <= 120_000) "current" else "last_known",
     )
 
+    // Read and validate a location saved with a pending emergency.
     fun fromJson(value: String?): Map<String, Any>? = try {
         val json = JSONObject(value ?: "")
         val latitude = json.getDouble("latitude")

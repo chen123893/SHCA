@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
 }
@@ -23,6 +24,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   static const Color primaryColor = Color(0xFFE85D4A);
 
+  // release the controllers when this page is removed.
   @override
   void dispose() {
     _emailController.dispose();
@@ -96,6 +98,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
+  // Keep the login form fields styled the same way.
   InputDecoration _buildInputDecoration({
     required String labelText,
     required IconData prefixIcon,
@@ -132,6 +135,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
+  // Show the new-account form and the link back to sign-in.
   @override
   Widget build(BuildContext context) {
     return Scaffold(

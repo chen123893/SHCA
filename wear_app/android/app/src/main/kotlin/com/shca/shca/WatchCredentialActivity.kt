@@ -12,11 +12,13 @@ import android.widget.*
 
 /** Native EditText keeps Samsung/Wear OS IME edits synchronized before returning to Flutter. */
 class WatchCredentialActivity : Activity() {
+    // Show the native watch editor for the requested email or password field.
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val password = intent.getStringExtra("field") == "password"
         if (password) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         val density = resources.displayMetrics.density
+        // Convert the input layout's dp values into screen pixels.
         fun dp(value: Int) = (value * density).toInt()
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -42,6 +44,7 @@ class WatchCredentialActivity : Activity() {
             setSelection(text.length)
             minHeight = dp(48)
         }
+        // Return the entered credential to the watch activity and close the editor.
         fun done() {
             setResult(RESULT_OK, Intent().putExtra("value", edit.text.toString()))
             finish()

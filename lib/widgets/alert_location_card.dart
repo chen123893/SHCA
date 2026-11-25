@@ -6,6 +6,7 @@ class AlertLocationCard extends StatelessWidget {
   const AlertLocationCard({super.key, required this.location});
   final Object? location;
 
+  // Show the emergency location details and the button to open Maps.
   @override
   Widget build(BuildContext context) {
     final saved = AlertLocation.parse(location);

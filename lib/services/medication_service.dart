@@ -23,8 +23,10 @@ class MedicationRecordRefresh {
   static final StreamController<String> _controller =
       StreamController<String>.broadcast(sync: true);
 
+  // Let medication screens listen for saved record changes.
   static Stream<String> get events => _controller.stream;
 
+  // Tell the medication screens which account's records changed.
   static void notify(String elderlyId) => _controller.add(elderlyId);
 }
 
@@ -34,11 +36,13 @@ const Set<String> _legacyDemoScheduleKeys = <String>{
   'metformin',
 };
 
+// Recognise the old sample medicines so they can be handled separately.
 bool isLegacyDemoMedicationData(Map<String, dynamic> data) {
   final scheduleKey = data['scheduleKey'] as String?;
   return _legacyDemoScheduleKeys.contains(scheduleKey);
 }
 
+// Subtract the taken quantity without letting stock drop below zero.
 @visibleForTesting
 int? medicationStockAfterTakenDose(int? remaining, int quantity) {
   if (remaining == null) return null;
@@ -100,11 +104,14 @@ class MedicationSchedule {
     return values.toList()..sort();
   }
 
+  // Count the reminder times configured for this medicine.
   int get timesPerDay => dailyReminderMinutes.length;
 
+  // Use the saved quantity or read it from the dose text, defaulting to one.
   int get effectiveQuantity =>
       quantity ?? medicationQuantityFromText(dose) ?? 1;
 
+  // Choose the quantity wording for the medicine type.
   String get quantityLabel {
     final amount = effectiveQuantity;
     final singularUnit = switch (visual) {
@@ -115,16 +122,20 @@ class MedicationSchedule {
     return '$amount $singularUnit${amount == 1 ? '' : 's'}';
   }
 
+  // Combine the dose quantity and strength for display.
   String get doseSummary {
     final strength = medicationStrengthFromText(dose);
     return strength.isEmpty ? quantityLabel : '$strength • $quantityLabel';
   }
 
+  // Check whether the remaining stock has reached the reminder threshold.
   bool get isLowStock =>
       stockRemaining != null && stockRemaining! <= lowStockThreshold;
 
+  // Check whether this medicine follows a timed schedule.
   bool get hasAutomaticReminder => recurrence != MedicationRecurrence.asNeeded;
 
+  // Check the start, end and repeat rules for the given day.
   bool isScheduledOn(DateTime value) {
     final date = MedicationController.dateOnly(value);
     final start = startDate == null
@@ -148,6 +159,7 @@ class MedicationSchedule {
     };
   }
 
+  // Describe how often this reminder repeats.
   String get scheduleSummary => switch (recurrence) {
     MedicationRecurrence.daily => 'Every day',
     MedicationRecurrence.selectedDays =>
@@ -161,6 +173,7 @@ class MedicationSchedule {
     MedicationRecurrence.asNeeded => 'As needed • No automatic alarm',
   };
 
+  // Describe the saved treatment dates.
   String get treatmentDurationSummary {
     if (recurrence == MedicationRecurrence.oneTime) {
       return startDate == null
@@ -182,6 +195,7 @@ class MedicationSchedule {
     return '$days-day treatment • ${_shortDate(startDate!)}–${_shortDate(endDate!)}';
   }
 
+  // Copy the schedule with its updated stock value.
   MedicationSchedule copyWithStockRemaining(int? value) => MedicationSchedule(
     id: id,
     name: name,
@@ -206,6 +220,7 @@ class MedicationSchedule {
     reminderMinutes: reminderMinutes,
   );
 
+  // Prepare the schedule fields saved in Firestore.
   Map<String, dynamic> toFirestore(String elderlyId) => <String, dynamic>{
     'elderlyId': elderlyId,
     'scheduleKey': id,
@@ -231,6 +246,7 @@ class MedicationSchedule {
     'active': true,
   };
 
+  // Keep the medicine details with each dose's history.
   Map<String, dynamic> toRecordSnapshot() => <String, dynamic>{
     'name': name,
     'dose': dose,
@@ -248,6 +264,7 @@ class MedicationSchedule {
     'reminderMinutes': dailyReminderMinutes,
   };
 
+  // Rebuild the medicine details stored with an old dose.
   factory MedicationSchedule.fromRecordSnapshot({
     required String medicationId,
     required DateTime scheduledAt,
@@ -275,6 +292,7 @@ class MedicationSchedule {
     );
   }
 
+  // Read a saved schedule, including older field formats.
   factory MedicationSchedule.fromFirestore(Map<String, dynamic> data) {
     return MedicationSchedule(
       id: (data['scheduleKey'] as String?) ?? '',
@@ -305,12 +323,14 @@ class MedicationSchedule {
   }
 }
 
+// Read the repeat type, falling back to the older daily schedule.
 MedicationRecurrence _parseRecurrence(dynamic value) =>
     MedicationRecurrence.values.firstWhere(
       (item) => item.name == value,
       orElse: () => MedicationRecurrence.daily,
     );
 
+// Keep valid weekday numbers from the saved schedule.
 List<int> _parseWeekdays(dynamic value) => value is List
     ? value
           .whereType<num>()
@@ -320,6 +340,7 @@ List<int> _parseWeekdays(dynamic value) => value is List
           .toList()
     : const <int>[];
 
+// Read and order the daily reminder times.
 List<int> _parseReminderMinutes(dynamic value) => value is List
     ? (value
           .whereType<num>()
@@ -330,6 +351,7 @@ List<int> _parseReminderMinutes(dynamic value) => value is List
         ..sort())
     : const <int>[];
 
+// Use a short weekday name in the schedule label.
 String _shortWeekday(int weekday) => const <String>[
   'Mon',
   'Tue',
@@ -340,9 +362,11 @@ String _shortWeekday(int weekday) => const <String>[
   'Sun',
 ][weekday.clamp(DateTime.monday, DateTime.sunday) - 1];
 
+// Use a short date label in the interface.
 String _shortDate(DateTime value) =>
     '${value.day}/${value.month}/${value.year}';
 
+// Read a whole-number quantity from the dose text.
 int? medicationQuantityFromText(String? value) {
   final match = RegExp(
     r'^\s*(\d+|satu|dua|tiga|empat|lima|enam|tujuh|lapan|sembilan|sepuluh)\s*(?:tablet|tablets|capsule|capsules|dose|doses|pill|pills|biji|pil|kapsul)\s*$',
@@ -365,6 +389,7 @@ int? medicationQuantityFromText(String? value) {
       }[amountText];
 }
 
+// Separate the strength value from the dose description.
 String medicationStrengthFromText(String? value) =>
     medicationQuantityFromText(value) == null ? (value ?? '').trim() : '';
 
@@ -385,12 +410,14 @@ class MedicationRecord {
   final DateTime? snoozedUntil;
   final MedicationSchedule? scheduleSnapshot;
 
+  // Identify this medicine's dose on its scheduled day and time.
   String get key => MedicationController.recordKey(
     medicationId,
     scheduledAt,
     includeTime: (scheduleSnapshot?.timesPerDay ?? 1) > 1,
   );
 
+  // Copy this dose record while changing only the supplied fields.
   MedicationRecord copyWith({
     MedicationStatus? status,
     DateTime? actionAt,
@@ -409,6 +436,7 @@ class MedicationRecord {
     );
   }
 
+  // Prepare the dose record for local storage.
   Map<String, dynamic> toJson() => <String, dynamic>{
     'medicationId': medicationId,
     'scheduledAt': scheduledAt.toIso8601String(),
@@ -418,6 +446,7 @@ class MedicationRecord {
     'scheduleSnapshot': scheduleSnapshot?.toRecordSnapshot(),
   };
 
+  // Prepare the dose record and snapshot for Firestore.
   Map<String, dynamic> toFirestore(String elderlyId) => <String, dynamic>{
     'elderlyId': elderlyId,
     'medicationId': medicationId,
@@ -431,6 +460,7 @@ class MedicationRecord {
     'scheduleSnapshot': scheduleSnapshot?.toRecordSnapshot(),
   };
 
+  // Read a locally saved dose record.
   factory MedicationRecord.fromJson(Map<String, dynamic> json) {
     return MedicationRecord(
       medicationId: json['medicationId'] as String,
@@ -446,6 +476,7 @@ class MedicationRecord {
     );
   }
 
+  // Read a dose record saved in Firestore.
   factory MedicationRecord.fromFirestore(Map<String, dynamic> data) {
     final medicationId = (data['medicationId'] as String?) ?? '';
     final scheduledAt = _parseDate(data['scheduledAt']) ?? DateTime.now();
@@ -464,6 +495,7 @@ class MedicationRecord {
   }
 }
 
+// Read the medicine details stored with a historical dose.
 MedicationSchedule? _scheduleSnapshotFromData({
   required String medicationId,
   required DateTime scheduledAt,
@@ -477,6 +509,7 @@ MedicationSchedule? _scheduleSnapshotFromData({
   );
 }
 
+// Keep one response for each dose when old and new records overlap.
 List<MedicationRecord> deduplicateMedicationRecords(
   Iterable<MedicationRecord> records,
 ) {
@@ -497,6 +530,7 @@ List<MedicationRecord> deduplicateMedicationRecords(
   return unique.values.toList();
 }
 
+// Prefer the latest action, then the stronger status if times match.
 MedicationRecord _preferMedicationRecord(
   MedicationRecord first,
   MedicationRecord second,
@@ -506,6 +540,7 @@ MedicationRecord _preferMedicationRecord(
   if (firstAction != secondAction) {
     return firstAction > secondAction ? first : second;
   }
+  // Prefer taken or missed over an unresolved response when timestamps match.
   int statusPriority(MedicationStatus status) => switch (status) {
     MedicationStatus.taken => 4,
     MedicationStatus.missed => 3,
@@ -517,12 +552,14 @@ MedicationRecord _preferMedicationRecord(
       : second;
 }
 
+// Read a saved status, using pending when the value is unknown.
 MedicationStatus _parseMedicationStatus(dynamic value) =>
     MedicationStatus.values.firstWhere(
       (status) => status.name == value,
       orElse: () => MedicationStatus.pending,
     );
 
+// Read dates stored as a Firestore timestamp, text or milliseconds.
 DateTime? _parseDate(dynamic value) {
   if (value is Timestamp) return value.toDate();
   if (value is String && value.isNotEmpty) return DateTime.tryParse(value);
@@ -552,12 +589,15 @@ class FirestoreMedicationRepository implements MedicationRepository {
 
   final FirebaseFirestore _firestore;
 
+  // Use the medications collection for these database operations.
   CollectionReference<Map<String, dynamic>> get _medications =>
       _firestore.collection('medications');
 
+  // Use the medication_records collection for these database operations.
   CollectionReference<Map<String, dynamic>> get _records =>
       _firestore.collection('medication_records');
 
+  // Load the medicine schedules belonging to this elderly account.
   @override
   Future<List<MedicationSchedule>> loadSchedules(String elderlyId) async {
     final result = await _medications
@@ -580,6 +620,7 @@ class FirestoreMedicationRepository implements MedicationRepository {
     return schedules;
   }
 
+  // Save added or edited medicine schedules in one batch.
   @override
   Future<void> saveSchedules(
     String elderlyId,
@@ -599,11 +640,13 @@ class FirestoreMedicationRepository implements MedicationRepository {
     }
   }
 
+  // Remove the medicine from the active schedule list.
   @override
   Future<void> deleteSchedule(String elderlyId, String scheduleId) async {
     await _medications.doc('${elderlyId}_$scheduleId').delete();
   }
 
+  // Load the elderly account's saved dose history.
   @override
   Future<List<MedicationRecord>> loadRecords(String elderlyId) async {
     final result = await _records
@@ -622,6 +665,7 @@ class FirestoreMedicationRepository implements MedicationRepository {
     return records;
   }
 
+  // Save this dose's response and its medicine snapshot.
   @override
   Future<void> saveRecord(String elderlyId, MedicationRecord record) async {
     await _records.doc('${elderlyId}_${record.key}').set(<String, dynamic>{
@@ -677,6 +721,7 @@ class MedicationController extends ChangeNotifier {
        _legacyStorageKey = 'medication_records_$storageScope',
        _repository = repository ?? FirestoreMedicationRepository();
 
+  // Create local sample data for previews and widget tests.
   MedicationController.preview({
     DateTime? now,
     List<MedicationSchedule> schedules = const <MedicationSchedule>[],
@@ -699,22 +744,29 @@ class MedicationController extends ChangeNotifier {
   List<MedicationRecord> _records = <MedicationRecord>[];
   bool _isLoaded = false;
 
+  // Check whether the initial medicine data has finished loading.
   bool get isLoaded => _isLoaded;
+  // Expose the active schedules without allowing outside edits.
   List<MedicationSchedule> get medicationSchedules =>
       List.unmodifiable(_schedules);
+  // Keep the medicines that are scheduled on this day.
   List<MedicationSchedule> schedulesForDate(DateTime date) => _schedules
       .where((medication) => medication.isScheduledOn(date))
       .toList(growable: false);
+  // Get medicines that are taken as needed rather than at a set time.
   List<MedicationSchedule> get asNeededMedications => _schedules
       .where(
         (medication) => medication.recurrence == MedicationRecurrence.asNeeded,
       )
       .toList(growable: false);
+  // Expose the saved dose history without allowing outside edits.
   List<MedicationRecord> get records => List.unmodifiable(_records);
+  // Find the active medicines with low remaining stock.
   List<MedicationSchedule> get lowStockMedications => _schedules
       .where((medication) => medication.isLowStock)
       .toList(growable: false);
 
+  // Load schedules and history, then prepare the dose records for today.
   Future<void> load() async {
     if (_isLoaded) return;
     final repository = _repository;
@@ -739,11 +791,13 @@ class MedicationController extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Reload the saved data instead of using the already-loaded copy.
   Future<void> reload() async {
     _isLoaded = false;
     await load();
   }
 
+  // Get every scheduled dose time for this medicine on the given day.
   List<DateTime> occurrencesForDate(
     MedicationSchedule medication,
     DateTime date,
@@ -763,6 +817,7 @@ class MedicationController extends ChangeNotifier {
         .toList(growable: false);
   }
 
+  // Get a separate record for each scheduled dose on this day.
   List<MedicationRecord> recordsFor(
     MedicationSchedule medication, {
     DateTime? date,
@@ -770,6 +825,7 @@ class MedicationController extends ChangeNotifier {
       .map((occurrence) => recordFor(medication, scheduledAt: occurrence))
       .toList(growable: false);
 
+  // Find the dose record, or create its pending value if it has no response.
   MedicationRecord recordFor(
     MedicationSchedule medication, {
     DateTime? date,
@@ -793,6 +849,7 @@ class MedicationController extends ChangeNotifier {
         : aligned;
   }
 
+  // Save the taken response and update stock before confirming it to the screen.
   Future<void> markTaken(
     MedicationSchedule medication, {
     DateTime? scheduledAt,
@@ -823,6 +880,7 @@ class MedicationController extends ChangeNotifier {
     }
   }
 
+  // Save the new reminder time while keeping the original dose identity.
   Future<void> snooze(
     MedicationSchedule medication,
     Duration duration, {
@@ -837,6 +895,7 @@ class MedicationController extends ChangeNotifier {
     await _saveAndNotify(record);
   }
 
+  // Save the skipped dose as missed and clear any old snooze.
   Future<void> markMissed(
     MedicationSchedule medication, {
     DateTime? scheduledAt,
@@ -850,6 +909,7 @@ class MedicationController extends ChangeNotifier {
     await _saveAndNotify(record);
   }
 
+  // Get dose history within the selected date range, newest first.
   List<MedicationRecord> recordsBetween(DateTime start, DateTime end) {
     return _records
         .where(
@@ -863,6 +923,7 @@ class MedicationController extends ChangeNotifier {
       );
   }
 
+  // Find the medicine details, using a saved snapshot for older records.
   MedicationSchedule scheduleFor(String medicationId, {DateTime? scheduledAt}) {
     if (scheduledAt != null) {
       for (final record in _records) {
@@ -896,6 +957,7 @@ class MedicationController extends ChangeNotifier {
     );
   }
 
+  // Replace the local copy of this dose without duplicating it.
   void _replaceRecord(MedicationRecord replacement) {
     final index = _records.indexWhere(
       (record) => record.key == replacement.key,
@@ -907,6 +969,7 @@ class MedicationController extends ChangeNotifier {
     }
   }
 
+  // Prepare missing pending records for the day's scheduled doses.
   Future<void> _ensureRecordsForDate(
     DateTime date, {
     required bool persist,
@@ -946,6 +1009,7 @@ class MedicationController extends ChangeNotifier {
     }
   }
 
+  // Turn unresolved doses from earlier days into missed records.
   Future<void> _markPastPendingRecordsMissed() async {
     final today = dateOnly(DateTime.now());
     final replacements = <MedicationRecord>[];
@@ -969,11 +1033,13 @@ class MedicationController extends ChangeNotifier {
     }
   }
 
+  // Save the changed dose, then notify listeners.
   Future<void> _saveAndNotify(MedicationRecord record) async {
     await _repository?.saveRecord(_elderlyId, record);
     notifyListeners();
   }
 
+  // Read older medication history from local preferences.
   Future<List<MedicationRecord>> _loadLegacyRecords() async {
     final preferences = await SharedPreferences.getInstance();
     final stored = preferences.getString(_legacyStorageKey);
@@ -989,6 +1055,7 @@ class MedicationController extends ChangeNotifier {
     }
   }
 
+  // Make sample dose history for the preview controller.
   static List<MedicationRecord> _createPreviewRecords(
     DateTime now,
     List<MedicationSchedule> schedules,
@@ -1031,9 +1098,11 @@ class MedicationController extends ChangeNotifier {
     return records;
   }
 
+  // Remove the time so dates can be compared by day.
   static DateTime dateOnly(DateTime date) =>
       DateTime(date.year, date.month, date.day);
 
+  // Align a single daily dose with its current time and keep any Taken response.
   static MedicationRecord _alignSingleDailyOccurrence(
     MedicationRecord record,
     MedicationSchedule medication,
@@ -1067,6 +1136,7 @@ class MedicationController extends ChangeNotifier {
     );
   }
 
+  // Combine the selected date with the medicine's primary reminder time.
   static DateTime scheduledDateTime(
     MedicationSchedule medication,
     DateTime date,
@@ -1078,6 +1148,7 @@ class MedicationController extends ChangeNotifier {
     medication.minute,
   );
 
+  // Build the reminder times that belong to this medicine on this day.
   static List<DateTime> scheduledOccurrences(
     MedicationSchedule medication,
     DateTime date,
@@ -1093,6 +1164,7 @@ class MedicationController extends ChangeNotifier {
       )
       .toList(growable: false);
 
+  // Use the appropriate daily or timed key for this medicine's dose.
   static String recordKeyFor(
     MedicationSchedule medication,
     DateTime scheduledAt,
@@ -1102,6 +1174,7 @@ class MedicationController extends ChangeNotifier {
     includeTime: medication.timesPerDay > 1,
   );
 
+  // Build a stable dose key from its date, time and medicine ID.
   static String recordKey(
     String medicationId,
     DateTime date, {

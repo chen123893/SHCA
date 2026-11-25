@@ -52,6 +52,7 @@ internal class EmergencyLocationChannel(
         }
     }
 
+    // Finish the waiting location request for the same account after permission is granted.
     fun permissionResult(requestCode: Int): Boolean {
         if (requestCode != REQUEST_CODE) return false
         val request = pending ?: return true

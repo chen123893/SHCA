@@ -26,6 +26,7 @@ class CaregiverProfileScreen extends StatefulWidget {
   final CareLinkRepository? careLinkRepository;
   final AppSessionService? sessionService;
 
+  // Keep this screen's changing values in its own state object.
   @override
   State<CaregiverProfileScreen> createState() => _CaregiverProfileScreenState();
 }
@@ -50,6 +51,7 @@ class _CaregiverProfileScreenState extends State<CaregiverProfileScreen> {
   String? _error;
   List<LinkedElderly> _linkedElderly = const <LinkedElderly>[];
 
+  // Prepare the edit fields and load the saved caregiver profile.
   @override
   void initState() {
     super.initState();
@@ -61,6 +63,7 @@ class _CaregiverProfileScreenState extends State<CaregiverProfileScreen> {
     unawaited(_load());
   }
 
+  // release the controllers when this page is removed.
   @override
   void dispose() {
     _nameController.dispose();
@@ -68,6 +71,7 @@ class _CaregiverProfileScreenState extends State<CaregiverProfileScreen> {
     super.dispose();
   }
 
+  // Load the caregiver profile and linked elderly accounts.
   Future<void> _load() async {
     if (mounted) {
       setState(() {
@@ -112,6 +116,7 @@ class _CaregiverProfileScreenState extends State<CaregiverProfileScreen> {
     }
   }
 
+  // Validate and save the caregiver's contact and notification settings.
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     final user = FirebaseAuth.instance.currentUser;
@@ -163,6 +168,7 @@ class _CaregiverProfileScreenState extends State<CaregiverProfileScreen> {
     }
   }
 
+  // Open the linking form and refresh the list afterwards.
   Future<void> _openLinkElderly() async {
     await Navigator.push<void>(
       context,
@@ -171,6 +177,7 @@ class _CaregiverProfileScreenState extends State<CaregiverProfileScreen> {
     if (mounted) await _load();
   }
 
+  // Confirm removal of this elderly account from the caregiver's list.
   Future<void> _removeLink(LinkedElderly elderly) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -214,6 +221,7 @@ class _CaregiverProfileScreenState extends State<CaregiverProfileScreen> {
     }
   }
 
+  // Sign out and return to the login screen.
   Future<void> _signOut() async {
     if (_signingOut) return;
     setState(() => _signingOut = true);
@@ -234,6 +242,7 @@ class _CaregiverProfileScreenState extends State<CaregiverProfileScreen> {
     }
   }
 
+  // Open the password change form.
   Future<void> _openChangePassword() async {
     final changed = await Navigator.push<bool>(
       context,
@@ -250,6 +259,7 @@ class _CaregiverProfileScreenState extends State<CaregiverProfileScreen> {
     }
   }
 
+  // Open the monitoring details for the selected elderly account.
   void _openStatus() {
     if (_linkedElderly.isEmpty) {
       unawaited(_openLinkElderly());
@@ -266,6 +276,7 @@ class _CaregiverProfileScreenState extends State<CaregiverProfileScreen> {
     );
   }
 
+  // Open the medication page for the selected elderly account.
   void _openMedication() {
     if (_linkedElderly.isEmpty) {
       _showMessage('Link an elderly account before managing medication.');
@@ -282,6 +293,7 @@ class _CaregiverProfileScreenState extends State<CaregiverProfileScreen> {
     );
   }
 
+  // Show a short message at the bottom of the screen.
   void _showMessage(String message, {bool error = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -292,9 +304,11 @@ class _CaregiverProfileScreenState extends State<CaregiverProfileScreen> {
     );
   }
 
+  // Check that a name was entered.
   String? _validateName(String? value) =>
       value == null || value.trim().isEmpty ? 'Enter your full name.' : null;
 
+  // Convert the phone number into the form used for SMS.
   String? _smsNumber(String value) {
     final compact = value.trim().replaceAll(RegExp(r'[ ()-]'), '');
     final number = compact.startsWith('0')
@@ -305,6 +319,7 @@ class _CaregiverProfileScreenState extends State<CaregiverProfileScreen> {
     return RegExp(r'^[+][1-9][0-9]{8,14}$').hasMatch(number) ? number : null;
   }
 
+  // Check that the phone number has enough digits.
   String? _validatePhone(String? value) {
     if (_smsAlert && _smsNumber(value ?? '') == null) {
       return 'For SMS, enter a Malaysian mobile number or include the country code.';
@@ -316,6 +331,7 @@ class _CaregiverProfileScreenState extends State<CaregiverProfileScreen> {
     return null;
   }
 
+  // Show the caregiver profile, linked accounts and notification settings.
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -332,6 +348,7 @@ class _CaregiverProfileScreenState extends State<CaregiverProfileScreen> {
     );
   }
 
+  // Choose between the profile view, edit form and loading state.
   Widget _buildBody() {
     if (_loading) {
       return const Center(
@@ -445,6 +462,7 @@ class _CaregiverProfileScreenState extends State<CaregiverProfileScreen> {
     );
   }
 
+  // Show the saved caregiver information and linked elderly accounts.
   Widget _buildProfileDetails() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -542,6 +560,7 @@ class _CaregiverProfileScreenState extends State<CaregiverProfileScreen> {
     );
   }
 
+  // Show the editable contact details and notification preferences.
   Widget _buildEditForm() {
     return Form(
       key: _formKey,
@@ -692,6 +711,7 @@ class _CaregiverProfileScreenState extends State<CaregiverProfileScreen> {
 class _CaregiverAvatar extends StatelessWidget {
   const _CaregiverAvatar();
 
+  // Show the caregiver profile avatar.
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -716,6 +736,7 @@ class _SectionTitle extends StatelessWidget {
 
   final String title;
 
+  // Show the title for a group of related details.
   @override
   Widget build(BuildContext context) {
     return Text(
@@ -734,6 +755,7 @@ class _ProfileCard extends StatelessWidget {
 
   final List<Widget> children;
 
+  // Wrap caregiver profile details in the shared card style.
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -767,6 +789,7 @@ class _InformationRow extends StatelessWidget {
   final String label;
   final String value;
 
+  // Show one saved detail beside its label.
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -807,6 +830,7 @@ class _LinkedElderlyCard extends StatelessWidget {
   final LinkedElderly elderly;
   final VoidCallback onRemove;
 
+  // Show a linked elderly account and the option to remove its link.
   @override
   Widget build(BuildContext context) {
     final details = <String>[
@@ -880,6 +904,7 @@ class _NotificationRow extends StatelessWidget {
   final String subtitle;
   final bool enabled;
 
+  // Show one caregiver notification setting and its current value.
   @override
   Widget build(BuildContext context) {
     return Padding(
